@@ -15,7 +15,7 @@ function createWindow() {
   const window = new BrowserWindow({ width: 1440, height: 960, minWidth: 1024, minHeight: 720, title: 'CommerceCanvas', backgroundColor: '#ffffff', webPreferences: { preload: join(__dirname, '../preload/index.js'), contextIsolation: true, sandbox: true, nodeIntegration: false } });
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-navigate', (event) => event.preventDefault());
-  if (process.env.ELECTRON_RENDERER_URL) void window.loadURL(process.env.ELECTRON_RENDERER_URL);
+  if (!app.isPackaged && process.env.ELECTRON_RENDERER_URL) void window.loadURL(process.env.ELECTRON_RENDERER_URL);
   else void window.loadFile(join(__dirname, '../renderer/index.html'));
 }
 void app.whenReady().then(() => {

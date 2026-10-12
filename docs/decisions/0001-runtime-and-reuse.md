@@ -29,4 +29,10 @@ electron-vite 5 的 peer 范围为 Vite 5/6/7，因此未采用 Vite 8。以实�
 
 以上核对文件带有 `SPDX-License-Identifier: Elastic-2.0` 和 `Copyright (c) 2026 ClaymoreLab`；前端许可证位于 `frontend/LICENSE`。本轮没有复制 Nuomi 源码。未来若移植，必须保留许可、版权、归属标识，并复核 Elastic-2.0 对托管服务与许可保护的限制；不得将该许可当作 MIT/Apache。
 
+### 导入链与适配策略
+
+- `CanvasNodeImage.tsx:5` 导入 `@/stores/canvasStore`。未来抽取时以显式 props / 回调提供预览动作与图片列表，移除对 Nuomi 全局 store 的直接依赖；不复制 store。
+- `computeSnapAlign.ts:3–5` 导入 `@/features/canvas/domain/canvasNodes` 的节点类型与 `./snapAlignStore` 的参考线类型。未来将计算所需位置、尺寸字段映射为 CommerceCanvas 自有契约，参考线作为计算结果交给 UI 状态层；保持纯计算与状态更新分离。
+- `autoLayout.ts:3` 导入 `@/features/canvas/domain/canvasNodes` 的 `DEFAULT_NODE_WIDTH`、`CanvasEdge` 与 `CanvasNode`。未来由新的节点/边模型显式映射到布局输入，将默认宽高改为调用侧参数；布局结果通过独立命令更新画布，不保留 Nuomi 业务节点结构。
+
 版本和运行时依据：[Electron releases](https://releases.electronjs.org/?channel=stable)、[utilityProcess](https://www.electronjs.org/docs/latest/api/utility-process)、[electron-vite](https://electron-vite.org/guide/)。

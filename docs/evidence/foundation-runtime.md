@@ -44,3 +44,10 @@
 系统 Node 单测输出 SQLite experimental warning；Playwright 输出 NO_COLOR/FORCE_COLOR 环境提示，不影响结果。首次 binary 下载可发生在 Electron 首次使用时，CI 应预下载后再跑计时测试。
 
 自审：没有复制 Nuomi 源码；没有中转站/号池/收费服务；没有写入其他代理拥有的计划文档。当前阶段提供可运行工程壳，不声称已交付完整产品。
+
+## 规格审查修复 · 2026-10-13
+
+- 新增 packaged URL 注入回归：旧应用在设置 `ELECTRON_RENDERER_URL=data:text/html,<h1>Injected development page</h1>` 后实际加载该地址，测试因期望本地 `file:…/renderer/index.html` 失败（RED）。
+- 主进程增加 `!app.isPackaged` 门槛，打包应用始终加载本地 renderer。重新打包后，健康检查与 URL 注入防护两项 E2E 全部通过（2 passed，3.7 秒），注入场景仍显示真实引擎就绪。
+- 修复后 `npm run typecheck`、`npm test`、build 与 macOS arm64 package 均通过；第一次重打包发生临时 `fetch failed`，相同权限命令重试成功。
+- A/B 实际桌面截图已归档到受版本控制的 `docs/design/screenshots/`，在视觉系统文档中展示。ADR 已补充三组 Nuomi 具体导入链和适配策略。

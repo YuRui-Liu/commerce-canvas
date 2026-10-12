@@ -14,3 +14,11 @@
 图片是后续主角，当前不放置模拟商品图、模拟任务成功或可误用的伪按钮。导入、生成等未实现能力明确标注开发中。UI 不展示金额、账单与支付入口。
 
 主题为当前会话状态；尚未实现主题偏好持久化。生产设计复核要求见 [production-ui-checklist.md](production-ui-checklist.md)。
+
+## 已归档桌面截图
+
+以下为实际 Electron 应用截图，包含真实 utility process 健康状态：
+
+![A · 冷白钴蓝](screenshots/foundation-desktop.png)
+
+![B · 纸白莓红](screenshots/foundation-desktop-editorial.png)

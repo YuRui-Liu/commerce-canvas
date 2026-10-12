@@ -22,3 +22,15 @@ test('secure desktop displays capabilities verified inside Electron utility proc
     await page.screenshot({ path: 'apps/desktop/dist/foundation-desktop-editorial.png' });
   } finally { await app.close(); }
 });
+
+test('packaged app ignores an injected development renderer URL', async () => {
+  const executablePath = process.env.COMMERCECANVAS_EXECUTABLE;
+  test.skip(!executablePath, 'Requires the packaged application');
+  const app = await electron.launch({ executablePath, args: [], env: { ...process.env, ELECTRON_RENDERER_URL: 'data:text/html,<h1>Injected development page</h1>' } });
+  try {
+    const page = await app.firstWindow();
+    await expect(page).toHaveURL(/^file:.*\/renderer\/index\.html$/);
+    await expect(page.getByText('本地引擎已就绪')).toBeVisible();
+    expect(await app.evaluate(({ app }) => app.isPackaged)).toBe(true);
+  } finally { await app.close(); }
+});
