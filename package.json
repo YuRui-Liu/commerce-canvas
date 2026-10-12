@@ -1,0 +1,41 @@
+{
+  "name": "@commercecanvas/workspace",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "npm run dev -w @commercecanvas/desktop",
+    "build": "npm run build -w @commercecanvas/desktop",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:e2e": "npm run build && playwright test -c apps/desktop/playwright.config.ts",
+    "package:desktop": "npm run build && electron-packager . CommerceCanvas --out=dist/packages --overwrite --asar.unpackDir=node_modules/@img --ignore=^/docs --ignore=^/apps/desktop/src --ignore=^/apps/desktop/tests --ignore=^/packages --ignore=^/dist/packages --ignore=^/.git"
+  },
+  "main": "apps/desktop/dist/main/index.js",
+  "devDependencies": {
+    "@electron/packager": "20.3.0",
+    "@playwright/test": "1.64.0",
+    "@types/node": "24.19.2",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "5.2.0",
+    "electron": "44.7.0",
+    "electron-vite": "5.0.0",
+    "typescript": "5.9.3",
+    "vite": "7.3.7",
+    "vitest": "3.2.7"
+  },
+  "dependencies": {
+    "@xyflow/react": "12.12.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "sharp": "0.35.5",
+    "zustand": "5.0.15"
+  }
+}
