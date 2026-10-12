@@ -35,7 +35,7 @@ const options = {
 
 **创建：** `packages/contracts/src/domain.ts`、`packages/contracts/src/errors.ts`、`packages/contracts/src/index.ts`；`packages/runtime/src/db/open.ts`、`migrations/001-foundation.sql`；`packages/runtime/src/projects/repository.ts`；测试 `packages/runtime/test/projects.test.ts`。
 
-- [ ] 定义跨计划引用的基础形状并用 Zod 校验外部输入；日期、数量、字符串长度不能仅依赖 TypeScript。
+- [x] 定义跨计划引用的基础形状并用 Zod 校验外部输入；日期、数量、字符串长度不能仅依赖 TypeScript。
 
 ```ts
 export type InputRole = 'product' | 'scene' | 'style' | 'facts' | 'instruction' | 'copy';
@@ -51,16 +51,16 @@ export interface AssetVersion {
 export interface Failure { code: string; message: string; retryable: boolean }
 ```
 
-- [ ] 写入实际 SQLite 测试：创建项目、更新事实使用预期 revision、关闭后重开数据仍存在；旧 revision 更新抛出 `REVISION_CONFLICT`。测试项目使用临时目录，并在结束关闭连接。
+- [x] 写入实际 SQLite 测试：创建项目、更新事实使用预期 revision、关闭后重开数据仍存在；旧 revision 更新抛出 `REVISION_CONFLICT`。测试项目使用临时目录，并在结束关闭连接。
 
 ```ts
 expect(repository.updateFacts(project.id, 1, { capacity: '30 ml' }).revision).toBe(2);
 expect(() => repository.updateFacts(project.id, 1, {})).toThrow('REVISION_CONFLICT');
 ```
 
-- [ ] 运行 `npm test -- packages/runtime/test/projects.test.ts`，确认因 repository 未实现失败。实现 `openDatabase(file)`、`ProjectRepository.create(name)`、`updateFacts(id, expectedRevision, facts)`、`get(id)`；使用参数化 SQL、foreign_keys、事务迁移与 revision 条件更新。SKU、品牌规范分别存表，以 project_id 外键关联。
-- [ ] 同一测试加入事务回滚：非法 SKU 不能留下半个项目更新。重复运行迁移不重复执行。运行上述测试及 `npm run typecheck`。
-- [ ] 提交：`git add packages/contracts packages/runtime/src/db packages/runtime/src/projects packages/runtime/test/projects.test.ts`，`git commit -m "feat: persist product projects and revisioned facts"`。
+- [x] 运行 `npm test -- packages/runtime/test/projects.test.ts`，确认因 repository 未实现失败。实现 `openDatabase(file)`、`ProjectRepository.create(name)`、`updateFacts(id, expectedRevision, facts)`、`get(id)`；使用参数化 SQL、foreign_keys、事务迁移与 revision 条件更新。SKU、品牌规范分别存表，以 project_id 外键关联。
+- [x] 同一测试加入事务回滚：非法 SKU 不能留下半个项目更新。重复运行迁移不重复执行。运行上述测试及 `npm run typecheck`。
+- [x] 提交：`git add packages/contracts packages/runtime/src/db packages/runtime/src/projects packages/runtime/test/projects.test.ts`，`git commit -m "feat: persist product projects and revisioned facts"`。
 
 ## F3 资产导入、版本与缩略图
 
