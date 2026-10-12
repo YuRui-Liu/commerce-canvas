@@ -142,4 +142,26 @@ describe('project storage in a real SQLite file', () => {
     expect(repository.listSkus(project.id)).toEqual([]);
     expect(repository.getBrandProfile(project.id)).toBeNull();
   });
+
+  it.each((['facts', 'attributes', 'guidelines'] as const).flatMap(location =>
+    ['collision', 'prototype'].map(kind => ({ location, kind }))))(
+    'rejects $kind keys in $location without changing any aggregate state', ({ location, kind }) => {
+      const project = repository.create('Original');
+      const sku = { id: randomUUID(), code: 'ORIGINAL', name: 'Original SKU', attributes: { size: 'S' } };
+      const brand = { name: 'Original brand', description: 'Original description', guidelines: { tone: 'warm' } };
+      const snapshot = repository.updateProduct(project.id, 1, { facts: { color: 'green' }, skus: [sku], brand });
+      const invalid: Record<string, string> = kind === 'collision'
+        ? { color: 'red', ' color ': 'blue' }
+        : JSON.parse('{"__proto__":"cotton"}');
+      const update = {
+        facts: location === 'facts' ? invalid : { color: 'changed' },
+        skus: [{ ...sku, name: 'Changed SKU', attributes: location === 'attributes' ? invalid : { size: 'M' } }],
+        brand: { ...brand, name: 'Changed brand', guidelines: location === 'guidelines' ? invalid : { tone: 'changed' } },
+      };
+      expect(() => repository.updateProduct(project.id, 2, update)).toThrow();
+      expect(repository.get(project.id)).toEqual(snapshot);
+      expect(repository.listSkus(project.id)).toEqual([{ ...sku, projectId: project.id }]);
+      expect(repository.getBrandProfile(project.id)).toEqual({ ...brand, projectId: project.id });
+    },
+  );
 });

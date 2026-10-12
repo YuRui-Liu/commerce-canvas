@@ -3,7 +3,12 @@ import { z } from 'zod';
 export const IdSchema = z.string().uuid();
 export const NameSchema = z.string().trim().min(1).max(200);
 export const RevisionSchema = z.number().int().min(1).max(Number.MAX_SAFE_INTEGER - 1);
-export const FactsSchema = z.record(z.string().trim().min(1).max(100), z.string().max(4000))
+// Validate keys before z.record constructs its output; never normalize or silently drop keys.
+const FactKeySchema = z.string().min(1).max(100).refine(
+  key => key === key.trim() && key !== '__proto__',
+  'Keys must have no surrounding whitespace and must not be __proto__',
+);
+export const FactsSchema = z.record(FactKeySchema, z.string().max(4000))
   .refine(value => Object.keys(value).length <= 100, 'At most 100 entries are allowed');
 export const InputRoleSchema = z.enum(['product', 'scene', 'style', 'facts', 'instruction', 'copy']);
 export const RuntimeKindSchema = z.enum(['deepseek', 'codex', 'workbuddy']);
