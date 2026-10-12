@@ -16,9 +16,9 @@
 
 **创建文件及职责：** `package.json`、`package-lock.json`（锁定依赖）；`tsconfig.json`、`vitest.config.ts`（检查）；`apps/desktop/electron.vite.config.ts`（main/preload/renderer 构建）；`apps/desktop/src/main/index.ts`（窗口）；`apps/desktop/src/preload/index.ts`（桥接）；`apps/desktop/src/renderer/main.tsx`、`index.html`（UI 入口）；`packages/runtime/src/entry.ts`（业务进程）；`docs/decisions/0001-runtime-and-reuse.md`（依据）。
 
-- [ ] 核对 Nuomi 复用文件的提交、许可与导入链，记录可复制部件和独立实现部件。保存 A／B 设计截图和色值到 `docs/design/visual-system.md`，不复制原型的模拟执行。
-- [ ] 建立 npm workspace：`apps/*`、`packages/*`。每个包用 `@commercecanvas/` 前缀；添加命令 `dev`、`build`、`typecheck`、`test`、`test:e2e`、`package:desktop`。锁定执行时稳定版本，不升级 Nuomi 依赖。
-- [ ] 桌面窗口使用下列明确设置，preload 在 renderer 编译产物之外；开发地址仅开发模式可加载。
+- [x] 核对 Nuomi 复用文件的提交、许可与导入链，记录可复制部件和独立实现部件。保存 A／B 设计截图和色值到 `docs/design/visual-system.md`，不复制原型的模拟执行。
+- [x] 建立 npm workspace：`apps/*`、`packages/*`。每个包用 `@commercecanvas/` 前缀；添加命令 `dev`、`build`、`typecheck`、`test`、`test:e2e`、`package:desktop`。锁定执行时稳定版本，不升级 Nuomi 依赖。
+- [x] 桌面窗口使用下列明确设置，preload 在 renderer 编译产物之外；开发地址仅开发模式可加载。
 
 ```ts
 const options = {
@@ -27,9 +27,9 @@ const options = {
 };
 ```
 
-- [ ] 在实际 Electron utility process 验证 `import('node:sqlite')`、建表与读写；验证 Sharp 在打包后可加载。功能不可用时先调整兼容依赖版本，不用内存存储冒充持久化。
-- [ ] 运行 `npm run build`、`npm run typecheck`。启动桌面，观察 renderer 无 Node 权限、runtime 能返回健康状态。将结果写入 `docs/evidence/foundation-runtime.md`。
-- [ ] 提交：`git add package.json package-lock.json tsconfig.json vitest.config.ts apps packages docs/decisions docs/design docs/evidence/foundation-runtime.md`，`git commit -m "chore: establish desktop runtime boundaries"`。
+- [x] 在实际 Electron utility process 验证 `import('node:sqlite')`、建表与读写；验证 Sharp 在打包后可加载。功能不可用时先调整兼容依赖版本，不用内存存储冒充持久化。
+- [x] 运行 `npm run build`、`npm run typecheck`。启动桌面，观察 renderer 无 Node 权限、runtime 能返回健康状态。将结果写入 `docs/evidence/foundation-runtime.md`。
+- [x] 提交：`git add package.json package-lock.json tsconfig.json vitest.config.ts apps packages docs/decisions docs/design docs/evidence/foundation-runtime.md`，`git commit -m "chore: establish desktop runtime boundaries"`。
 
 ## F2 共享契约与商品存储
 
