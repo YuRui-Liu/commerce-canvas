@@ -12,3 +12,17 @@
 主参考 [Style Library Skill](https://github.com/freestylefly/awesome-gpt-image-2/blob/main/agents/skills/gpt-image-2-style-library/SKILL.md) 将任务拆为主体任务、构图、材质风格、文字、输出规格、限制六部分，并通过场景/风格/案例匹配。CommerceCanvas 在此基础上增加不可变输入角色、商品事实来源、槽位、保护区、验收项及最大修正次数；执行权限仍由本地工具系统控制。
 
 预设需要保留 source URL、许可证标识、版本/核验日期；用户导入其他 Skill 时不自动下载或执行其中脚本。外部 Skill 的服务商广告和推荐不改变本产品 GRSai 直连决定。
+
+## 已核对的模板映射
+
+来自 [style-library.json](https://github.com/freestylefly/awesome-gpt-image-2/blob/main/data/style-library.json)；下列产品约束是 CommerceCanvas 的实现决定，非原仓库保证。
+
+| 本产品场景 | 可参考模板 ID / 案例 ID | 本产品必须额外控制 |
+| --- | --- | --- |
+| 主图、融合、SKU | product-commerce-visual / 373、358 | 商品身份固定，角色绑定清晰，SKU不跨槽位 |
+| 海报、卖点 | poster-layout-system / 345、5、10 | 文案来源确认，精确文字用编辑层 |
+| 模特、场景、精修 | realistic-photography / 377 | 保护商品纹理、人体关系与原始比例 |
+| 详情套图 | brand-touchpoint-board / 362 | 每屏独立槽位，统一品牌快照与屏序 |
+| 结构尺寸 | concept-product-breakdown / 370、361 | 必须先有真实结构依据，不能把概念图当实物事实 |
+
+抠图、翻译、扩图与尺寸适配不能只靠风格模板完成，仍需专门参数、能力检查和确定性图像处理。选择案例不自动导入其图片，也不复制第三方商标或卖点。
