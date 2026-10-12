@@ -23,7 +23,7 @@
 | 1 | [本地基础](2026-10-12-commercecanvas-01-foundation.md) | 无 | 桌面启动、项目／资产持久化、凭证隔离 |
 | 2 | [画布与双主题](2026-10-12-commercecanvas-02-canvas.md) | 1 | 真正可编辑、保存和恢复的商品画布 |
 | 3 | [Agent 与编排](2026-10-12-commercecanvas-03-agents.md) | 1、2 | 预设／自定义 Agent、三个运行适配器、确认与次数控制 |
-| 4 | [GRSai 直连与恢复](2026-10-12-commercecanvas-04-gateway.md) | 1、3 | GRSai 提交、按任务 ID 恢复、保存产物、部分成功 |
+| 4 | [GRSai 直连与恢复](2026-10-12-commercecanvas-04-grsai.md) | 1、3 | GRSai 提交、按任务 ID 恢复、保存产物、部分成功 |
 | 5 | [全部电商场景](2026-10-12-commercecanvas-05-scenarios.md) | 2、3、4 | 八类场景的专门编辑与验收 |
 | 6 | [检查、导出与发布](2026-10-12-commercecanvas-06-delivery.md) | 1–5 | 检查闭环、可用文件、桌面打包和真实验收证据 |
 
