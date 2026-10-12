@@ -4,7 +4,7 @@
 
 **目标：** 支持自定义 LLM + Skills、DeepSeek／Codex／WorkBuddy，以及受确认次数约束的统一执行。
 
-**架构：** 各模型适配器只返回结构化决策，runtime 校验后执行命名工具。画布与聊天共享 RunPlan 和事件，模型不能直接持有图片网关凭证或绕过生成限制。
+**架构：** 各模型适配器只返回结构化决策，runtime 校验后执行命名工具。画布与聊天共享 RunPlan 和事件，模型不能直接持有GRSai 图片服务凭证或绕过生成限制。
 
 **技术栈：** TypeScript、Zod、fetch、child_process、SQLite 事务、Vitest。依赖 F1–F4、C1–C4；真实图片交付由 G1–G4 接续。
 
@@ -63,7 +63,7 @@ const args = ['--print','--output-format','json','--tools','',
 ```
 
 - [ ] WorkBuddy 带图时按能力改为 stream-json 输入输出。禁用工具后不依赖其可能使用内部工具的 json-schema 模式；提示输出 schema 并由本地 Zod 验证。stdout 定向临时文件避免管道截断；读取严格有大小限制；处理 stderr 非空但退出 0 的失败结果。Nuomi `_json_payload` 仅作参考，字符串内花括号不能用简单倒序计数解析。
-- [ ] `processRunner` 限制超时与输出大小，退出/取消终止整棵已启动子进程；不给进程图片网关 Token，工作目录只提供获准资产和编译后的 Skill 内容。工具循环最大轮数默认 12，可按任务配置降低；耗尽返回 `AGENT_STEP_LIMIT`，保留历史。
+- [ ] `processRunner` 限制超时与输出大小，退出/取消终止整棵已启动子进程；不给进程GRSai 图片服务 Token，工作目录只提供获准资产和编译后的 Skill 内容。工具循环最大轮数默认 12，可按任务配置降低；耗尽返回 `AGENT_STEP_LIMIT`，保留历史。
 - [ ] 在 settings 增加“不出图连接验证”，真实运行三种 adapter 各返回简单 JSON，记录脱敏版本与结果到 `docs/evidence/agent-adapters.md`。真实模型调用的账号授权需有效；未获准或不可用记录阻塞，不伪造结果。
 - [ ] 运行全部指定契约测试、typecheck，提交 `git add packages/runtime/src/agents tests/contract tests/fixtures/agents docs/evidence/agent-adapters.md`，`git commit -m "feat: unify API and local agent decisions"`。
 
@@ -94,7 +94,7 @@ const outcomes = await Promise.allSettled([
 expect(outcomes.filter(x=>x.status==='fulfilled')).toHaveLength(1);
 ```
 
-- [ ] 运行 `npm test -- packages/runtime/test/run-limits.test.ts packages/runtime/test/run-revisions.test.ts`。实现 `reserve` 在 BEGIN IMMEDIATE 内验证 approvedRevision、槽位与 round 范围、唯一 `(run_id,slot_id,round)`；插入 attempt 和 outbox 同一事务，提交后才可调用网关。调用不明时保留预占，不自动释放。
+- [ ] 运行 `npm test -- packages/runtime/test/run-limits.test.ts packages/runtime/test/run-revisions.test.ts`。实现 `reserve` 在 BEGIN IMMEDIATE 内验证 approvedRevision、槽位与 round 范围、唯一 `(run_id,slot_id,round)`；插入 attempt 和 outbox 同一事务，提交后才可调用图片服务。调用不明时保留预占，不自动释放。
 - [ ] 调度器按 DAG 可运行节点启动，生成失败保留同组成功产物，阻塞依赖失败节点，允许用户仅重试失败项。输入改变创建新 revision，旧 Run 继续使用快照；新旧产物均可追溯。
 - [ ] `events.append` 与状态更新同事务，`events.listAfter(runId,seq)` 可重放，renderer 按 seq 去重。不以聊天文字推断状态。
 - [ ] 通过测试后提交 `git add packages/contracts/src/runs.ts packages/runtime/src/runs packages/runtime/src/db/migrations/002-runs.sql packages/runtime/test/run-*.test.ts`，`git commit -m "feat: enforce approved output slots atomically"`。
@@ -116,4 +116,4 @@ await expect(page.getByTestId('run-status')).toHaveText('制作中');
 - [ ] 运行 `npm run test:e2e -- tests/e2e/agent-run.spec.ts` 确认失败。Planner 将用户目标转为 schema 约束的 slots、required inputs 和依赖；无法识别商品事实时使用 needs_input，不补造参数。确认页展示张数与每张修正次数，含批量 SKU 合计，不展示费用。
 - [ ] 引用输入、Agent 版本和计划 revision 展示在任务详情。AgentNode 显示当前状态、成功／失败张数、停止原因和单独重跑。状态从事件同步，重跑创建新的计划批准而非重写历史。
 - [ ] 复用 C4 右侧对话／检查器状态；任务完成后新增产物节点并连线，不覆盖原始节点。由 G3 完成下载后才显示可导出。
-- [ ] 运行指定 E2E；无真实网关时只在显式测试模式使用假适配器，生产 UI 明确未连接。提交 `git add packages/runtime/src/agents/planner.ts apps/desktop/src/renderer/runs apps/desktop/src/renderer/workspace packages/canvas/src/nodes/AgentNode.tsx packages/contracts/src/bridge.ts tests/e2e/agent-run.spec.ts`，`git commit -m "feat: coordinate chat and canvas runs"`。
+- [ ] 运行指定 E2E；无真实图片服务时只在显式测试模式使用假适配器，生产 UI 明确未连接。提交 `git add packages/runtime/src/agents/planner.ts apps/desktop/src/renderer/runs apps/desktop/src/renderer/workspace packages/canvas/src/nodes/AgentNode.tsx packages/contracts/src/bridge.ts tests/e2e/agent-run.spec.ts`，`git commit -m "feat: coordinate chat and canvas runs"`。

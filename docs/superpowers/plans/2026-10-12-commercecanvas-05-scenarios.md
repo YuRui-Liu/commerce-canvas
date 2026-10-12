@@ -6,7 +6,7 @@
 
 **架构：** 场景配方声明输入角色、必要能力、输出槽位和检查项，编译成 A3 的 RunPlan。编辑器收集结构化参数；生成经 G1–G4，确定性裁切和排版用本地图像工具。
 
-**技术栈：** React、SVG／Canvas 区域编辑、Zod、Sharp、已有 Agent/Run/Gateway 端口、Vitest、Playwright。依赖 C1–C4、A1–A4、G1–G4。
+**技术栈：** React、SVG／Canvas 区域编辑、Zod、Sharp、已有 Agent/Run/ImageProvider 端口、Vitest、Playwright。依赖 C1–C4、A1–A4、G1–G4。
 
 ---
 
@@ -41,7 +41,7 @@ expect(combineMask({edit:255,protect:255})).toBe(0);
 ```
 
 - [ ] 运行 `npm test -- packages/ui/test/maskGeometry.test.ts` 确认失败，实现 normalizePoint、combineMask、笔刷大小、撤销／重做、区域反选和 clear。编辑遮罩保留独立版本并随任务快照，不覆盖原图。
-- [ ] RetouchEditor 区分精修、透明抠图、纯色／场景换背景。明确输出透明能力，网关无法输出透明时使用支持的分割工具，不能把白底 JPEG 称为透明图。
+- [ ] RetouchEditor 区分精修、透明抠图、纯色／场景换背景。明确输出透明能力，图片服务无法输出透明时使用支持的分割工具，不能把白底 JPEG 称为透明图。
 - [ ] 执行 `npm run test:e2e -- tests/e2e/retouch.spec.ts`：绘制保护区、确认、对比与单区域返修；真实样例包含细边和反光物。提交 `git add packages/contracts/src/scenes.ts packages/runtime/src/scenes apps/desktop/src/renderer/scenes packages/ui/src/mask packages/ui/test/maskGeometry.test.ts tests/e2e/retouch.spec.ts`，`git commit -m "feat: add constrained retouch and background workflows"`。
 
 ## S2 融图、商品替换与道具
@@ -79,7 +79,7 @@ expect(buildSkuSlots(['red','blue','black'],['front','back']).map(s=>s.id))
 
 **创建：** `packages/runtime/src/scenes/recipes/tryon.ts`；`apps/desktop/src/renderer/scenes/TryOnEditor.tsx`；测试 `packages/runtime/test/tryon.test.ts`、`tests/e2e/tryon.spec.ts`。
 
-- [ ] 测试模特和服饰参考不能颠倒；缺商品参考阻止运行；配饰部位枚举 ear/neck/wrist/hand/foot 与服饰模式区分。网关不支持必要参考图数量时在执行前说明。
+- [ ] 测试模特和服饰参考不能颠倒；缺商品参考阻止运行；配饰部位枚举 ear/neck/wrist/hand/foot 与服饰模式区分。图片服务不支持必要参考图数量时在执行前说明。
 - [ ] `npm test -- packages/runtime/test/tryon.test.ts` 失败后实现 `parseTryOn`：`mode` 为 garment/accessory，`modelRef`、`productRef`、`placement`、`protectedRegions` 必填；accessory 还需 `bodyPart`。
 
 ```ts
@@ -143,7 +143,7 @@ expect(()=>validateStructure({parts:[],references:[],mode:'exploded'}))
 **创建：** `packages/runtime/src/scenes/recipes/localize.ts`；`apps/desktop/src/renderer/scenes/LocalizationEditor.tsx`、`ResizeEditor.tsx`；测试 `packages/runtime/test/localization.test.ts`、`resize.test.ts`；`tests/e2e/localization.spec.ts`。
 
 - [ ] OCR 结果先成为可编辑文字区域列表；用户确认源文和不翻译项，再提供目标语言。测试品牌、型号、容量保持；长度变化触发溢出提示；未识别区域标为未核验而不是无文字。
-- [ ] `npm test -- packages/runtime/test/localization.test.ts packages/runtime/test/resize.test.ts` 确认失败。`planResize` 区分 contain/crop/outpaint，contain/crop 用确定性处理，只有 outpaint 调用网关。
+- [ ] `npm test -- packages/runtime/test/localization.test.ts packages/runtime/test/resize.test.ts` 确认失败。`planResize` 区分 contain/crop/outpaint，contain/crop 用确定性处理，只有 outpaint 调用图片服务。
 
 ```ts
 expect(planResize({source:{width:1000,height:500},target:{width:800,height:800},mode:'contain'}))

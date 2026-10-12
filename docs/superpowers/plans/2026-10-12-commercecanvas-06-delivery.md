@@ -4,7 +4,7 @@
 
 **目标：** 让产物可检查、有限返修、正确导出，并以真实证据完成桌面首版验收。
 
-**架构：** 检查结果以结构化问题关联产物版本，返修仍走获批 Run 的次数约束；导出消费不可变资产版本及文字层。桌面包不包含示例密钥、测试网关或浏览器原型服务器。
+**架构：** 检查结果以结构化问题关联产物版本，返修仍走获批 Run 的次数约束；导出消费不可变资产版本及文字层。桌面包不包含示例密钥、测试图片服务或浏览器原型服务器。
 
 **技术栈：** TypeScript、Sharp、授权中文字体、结构化视觉适配器、SQLite backup、Electron 打包工具、Vitest、Playwright。
 
@@ -62,7 +62,7 @@ expect({width:meta.width,height:meta.height}).toEqual({width:750,height:2000});
 **创建：** `packages/runtime/src/backup/service.ts`；`apps/desktop/electron-builder.yml`；`scripts/acceptance.mjs`、`docs/evidence/release-matrix.md`、`docs/user-guide.md`；测试 `packages/runtime/test/backup.test.ts`、`tests/e2e/desktop-recovery.spec.ts`。
 
 - [ ] 备份测试复制数据库快照及对应资产清单，restore 到新的临时 dataRoot 后每个引用都可读取；进行中的任务恢复为待核对，不在 restore 时立刻重发。缺文件的备份拒绝覆盖当前数据库。
-- [ ] 运行 `npm test -- packages/runtime/test/backup.test.ts` 确认失败。使用 SQLite backup／一致性快照与资产 hash 清单；备份不包含网关 Token 和本机 Agent 登录文件。恢复先校验到新目录，成功后切换，保留原数据直到用户确认。
+- [ ] 运行 `npm test -- packages/runtime/test/backup.test.ts` 确认失败。使用 SQLite backup／一致性快照与资产 hash 清单；备份不包含图片服务 Token 和本机 Agent 登录文件。恢复先校验到新目录，成功后切换，保留原数据直到用户确认。
 - [ ] 配置 Electron 打包：renderer、preload、utility 入口正确定位，Sharp 原生依赖与字体包含在包内；CSP、外链和导航边界有效。本机 CLI 检測使用应用路径与显式设置，不能依赖从终端启动时才有的 PATH。
 - [ ] 在 macOS 从 Finder 冷启动包，验证创建项目、图片导入、A／B 偏好、凭证读取、Codex／WorkBuddy 探测、运行恢复和导出。对打包凭证访问检查稳定签名；签名／公证凭证没有提供时只交付本机开发构建，不宣称可无提示分发。其他操作系统未验收不标记支持。
 - [ ] 自动验证命令与通过条件：
@@ -76,7 +76,7 @@ npm run package:desktop
 node scripts/acceptance.mjs --evidence docs/evidence/release-matrix.md
 ```
 
-- [ ] acceptance 检查 evidence 记录完整、对应当前 Git revision、有输出文件 hash；不能只检查 Markdown 中是否出现“通过”。真实验证矩阵包含 DeepSeek、Codex、WorkBuddy、用户图片网关及 S1–S8 每个场景。授权不足、能力缺失、未提供网关契约等均列出具体未通过项。
+- [ ] acceptance 检查 evidence 记录完整、对应当前 Git revision、有输出文件 hash；不能只检查 Markdown 中是否出现“通过”。真实验证矩阵包含 DeepSeek、Codex、WorkBuddy、GRSai及 S1–S8 每个场景。授权不足、能力缺失、未配置 GRSai API Key等均列出具体未通过项。
 - [ ] `desktop-recovery.spec.ts` 覆盖提交后关闭窗口／runtime 退出／进程重启、部分完成、取消竞态、旧计划批准失效。手动验证 200 节点流畅度、触控板、中文输入法、A／B 色彩、1024 px 窗口与焦点流向，记录截图和机器条件。
 - [ ] docs/user-guide 写商家操作：配置自己的 Token／Agent → 建商品 → 拖素材 → 选场景 → 确认张数 → 检查返修 → 导出；无费用和账单模块。故障页区分额度不足、Token 无效、网络待核对与输入缺失。
 - [ ] 提交 `git add packages/runtime/src/backup apps/desktop/electron-builder.yml scripts/acceptance.mjs docs/evidence/release-matrix.md docs/user-guide.md packages/runtime/test/backup.test.ts tests/e2e/desktop-recovery.spec.ts`，`git commit -m "feat: package and verify CommerceCanvas delivery"`。

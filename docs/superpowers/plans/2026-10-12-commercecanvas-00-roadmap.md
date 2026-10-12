@@ -4,7 +4,7 @@
 
 **目标：** 交付已批准规格中的独立电商图片客户端，包括全场景、双主题和三种 Agent 接入。
 
-**架构：** Electron 主进程负责窗口、凭证、IPC 与资产读取；独立 utility process 负责 SQLite、任务调度和图像处理。React 渲染器只通过类型化桥接访问业务服务，图片生成只走用户网关。
+**架构：** Electron 主进程负责窗口、凭证、IPC 与资产读取；独立 utility process 负责 SQLite、任务调度和图像处理。React 渲染器只通过类型化桥接访问业务服务，图片生成由本地运行时直接调用 GRSai。
 
 **技术栈：** TypeScript、Electron、Vite、React、React Flow、Zustand、Zod、Node SQLite、Sharp、Vitest、Playwright。正式依赖采用执行时兼容的稳定版本并锁定；先验证 Electron 内置 Node 支持 `node:sqlite`，不凭系统 Node 版本推断。
 
@@ -23,7 +23,7 @@
 | 1 | [本地基础](2026-10-12-commercecanvas-01-foundation.md) | 无 | 桌面启动、项目／资产持久化、凭证隔离 |
 | 2 | [画布与双主题](2026-10-12-commercecanvas-02-canvas.md) | 1 | 真正可编辑、保存和恢复的商品画布 |
 | 3 | [Agent 与编排](2026-10-12-commercecanvas-03-agents.md) | 1、2 | 预设／自定义 Agent、三个运行适配器、确认与次数控制 |
-| 4 | [图片网关与恢复](2026-10-12-commercecanvas-04-gateway.md) | 1、3 | 真网关提交、找回任务、保存产物、部分成功 |
+| 4 | [GRSai 直连与恢复](2026-10-12-commercecanvas-04-gateway.md) | 1、3 | GRSai 提交、按任务 ID 恢复、保存产物、部分成功 |
 | 5 | [全部电商场景](2026-10-12-commercecanvas-05-scenarios.md) | 2、3、4 | 八类场景的专门编辑与验收 |
 | 6 | [检查、导出与发布](2026-10-12-commercecanvas-06-delivery.md) | 1–5 | 检查闭环、可用文件、桌面打包和真实验收证据 |
 
@@ -43,7 +43,7 @@ packages/runtime/src/projects/ 商品事实、SKU、品牌
 packages/runtime/src/assets/   导入、版本、本地文件与缩略图
 packages/runtime/src/agents/   定义、Skill 编译、DeepSeek/Codex/WorkBuddy
 packages/runtime/src/runs/     计划、批准、次数预占、事件与恢复
-packages/runtime/src/gateway/  唯一图片生成入口、上传与查询
+packages/runtime/src/providers/grsai/  唯一图片生成入口、上传与查询
 packages/runtime/src/scenes/   场景配方、输入校验和预设
 packages/runtime/src/quality/  检查结果与返修约束
 packages/runtime/src/exports/  拼接、尺寸、文件与清单
@@ -63,7 +63,7 @@ docs/evidence/                 脱敏的接入、视觉和场景验收
 4. 本机 `codex exec --help` 已确认支持 stdin、JSONL、output-schema、ephemeral、read-only 等。未进行付费调用。
 5. `/Users/liuyuxiang05/.codebuddy/bin/buddy` 是编辑器启动器，不能当作 WorkBuddy 无头 CLI。已找到 `/Applications/WorkBuddy AI.app/Contents/Resources/app.asar.unpacked/cli/bin/codebuddy`，其 help 确認 print、JSON 输出、禁用 tools、输入格式及模型参数。Nuomi 的 `text_task_runtime/workbuddy.py` 记录了大输出管道截断与“退出 0 但响应为空”的处理经验；不直接搬入其禁用 Skill 的产品限制。
 6. API、Codex、WorkBuddy 统一使用“模型产生结构化动作，本地受控工具执行”的循环。Skills 在本地编译为每轮上下文；不要求把 Skill 安装进用户全局 Agent 配置。这样三种模式都能受同一计划限额控制。
-7. 图片网关 URL、实际接口格式和 Token 尚未提供。可先实现逻辑端口与测试适配器；真实 HTTP 映射以用户接口文档为依据，不臆造 GRSai 直连接口。
+7. 直接接入 GRSai 统一异步接口，使用用户的 GRSai API Key。不建设中转站或自有 Token 包装。已获得 ID 的任务恢复查询，缺 ID 的不确定提交暂停核对，禁止自动重发。真实出图需用户配置凭证。
 
 ## 跨计划共享规则
 
@@ -72,7 +72,7 @@ docs/evidence/                 脱敏的接入、视觉和场景验收
 - UI 不展示价格、金额、账单、充值促销，不返回供应商原始费用字段。
 - 任务次数由事务预占，按输出槽位计数；未知远端状态不释放额度、不创建新请求。
 - 数据源与主题无关；图像输出模块不得读取应用主题。
-- 网关 Token 不发给 Agent 进程；只在可信本地网关适配器使用。
+- 图片服务 Token 不发给 Agent 进程；只在可信本地图片服务适配器使用。
 - 模型来源、Skills 版本、输入版本必须保留在产物记录，用户可检查。
 
 ## 规格覆盖矩阵
@@ -86,7 +86,7 @@ docs/evidence/                 脱敏的接入、视觉和场景验收
 | 5 Agent / Skills | A1–A4 |
 | 6 全场景 | S1–S8 |
 | 7 次数确认 | A3、A4、G2 |
-| 8 网关 | G1–G4 |
+| 8 图片服务 | G1–G4 |
 | 9 模块与存储 | F1–F4，各子计划接口 |
 | 10 Nuomi 复用 | F1、C2 |
 | 11 恢复保护 | F3、F4、G2–G4、D3 |
@@ -103,7 +103,7 @@ docs/evidence/                 脱敏的接入、视觉和场景验收
 
 ## 完成边界
 
-界面模拟通过、契约测试通过、真实供应商接入通过是三种不同证据。WorkBuddy、Codex、图片网关或任一必需场景未真实验收时，明确列出缺项，不称首版全部交付。无需为尚未发生的正常本地编辑重复征询许可；真实付费任务在产品和当前会话授权范围内执行。
+界面模拟通过、契约测试通过、真实供应商接入通过是三种不同证据。WorkBuddy、Codex、GRSai 图片服务或任一必需场景未真实验收时，明确列出缺项，不称首版全部交付。无需为尚未发生的正常本地编辑重复征询许可；真实付费任务在产品和当前会话授权范围内执行。
 
 ## 计划自检
 
@@ -111,5 +111,5 @@ docs/evidence/                 脱敏的接入、视觉和场景验收
 - 全部内部文档链接存在；每项任务列出目标文件、行为验证、实现边界和提交范围。
 - 统一使用 AssetVersion、AssetRef、AgentDefinition、RunPlan、OutputSlot、RunEvent；所有出图场景最终进入同一 reserve/outbox 流程。
 - 限制统一为张数／修正次数；主题统一为 studio/editorial；未增加账单、GRSai 直连或 C 主题。
-- 外部依赖有明确取得与验收步骤：用户网关协议／Token、真实模型连接、字体与打包凭证。缺失项不阻止独立模块开发，但阻止对应的真实验收通过。
+- 外部依赖有明确取得与验收步骤：GRSai API Key、真实模型连接、字体与打包凭证。缺失项不阻止独立模块开发，但阻止对应的真实验收通过。
 - 当前只完成计划文档，没有安装依赖或编写产品实现；文档中的测试命令是实施时执行的检查，不是已通过的测试。
