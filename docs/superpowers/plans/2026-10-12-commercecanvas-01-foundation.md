@@ -86,7 +86,7 @@ await expect(service.importImage({ projectId, bytes: Buffer.from('not image'), f
 
 **创建：** `packages/contracts/src/bridge.ts`；`apps/desktop/src/main/ipc.ts`、`credentials.ts`；修改 preload；`packages/runtime/src/settings/repository.ts`；测试 `tests/contract/ipc.test.ts`、`tests/contract/credentials.test.ts`。
 
-- [ ] 定义固定方法集，renderer 不获得通用 IPC、任意文件读取或解密函数。
+- [x] 定义固定方法集，renderer 不获得通用 IPC、任意文件读取或解密函数。
 
 ```ts
 export interface DesktopBridge {
@@ -100,7 +100,7 @@ export interface DesktopBridge {
 }
 ```
 
-- [ ] 写测试拒绝非本应用 origin 的 IPC、未知方法、超长文本、非法主题；凭证存储返回 ID 而不是明文，runtime 日志不能包含输入 secret。运行 `npm test -- tests/contract/ipc.test.ts tests/contract/credentials.test.ts` 观察失败。
-- [ ] 凭证仅主进程解密，经锁定 Electron 版本的 safeStorage 加密保存；未提供安全存储时显示 `SECURE_STORAGE_UNAVAILABLE`，禁止静默明文回退。用户在设置表单中填写 Token，提交后清空明文输入；查询配置只返回脱敏尾号。
-- [ ] utility process 的消息同样解析 method、payload、request ID，按请求 ID 关联回复；退出时拒绝 pending 请求并提示恢复。业务请求只包含 credentialId，图片服务临时使用凭证后不写日志。
-- [ ] 运行指定测试、重启客户端验证主题与设置恢复。提交 `git add packages/contracts/src/bridge.ts apps/desktop/src/main apps/desktop/src/preload packages/runtime/src/settings tests/contract`，`git commit -m "feat: isolate desktop bridge and credentials"`。
+- [x] 写测试拒绝非本应用 origin 的 IPC、未知方法、超长文本、非法主题；凭证存储返回 ID 而不是明文，runtime 日志不能包含输入 secret。运行 `npm test -- tests/contract/ipc.test.ts tests/contract/credentials.test.ts` 观察失败。
+- [x] 凭证仅主进程解密，经锁定 Electron 版本的 safeStorage 加密保存；未提供安全存储时显示 `SECURE_STORAGE_UNAVAILABLE`，禁止静默明文回退。用户在设置表单中填写 Token，提交后清空明文输入（表单在 C1 接入）；查询配置只返回脱敏尾号。真实 Keychain 验证仍待验收。
+- [x] utility process 的消息同样解析 method、payload、request ID，按请求 ID 关联回复；退出时拒绝 pending 请求并提示恢复。业务请求只包含 credentialId，图片服务临时使用凭证后不写日志。
+- [x] 运行指定测试、重启客户端验证主题与设置恢复。提交 `git add packages/contracts/src/bridge.ts apps/desktop/src/main apps/desktop/src/preload packages/runtime/src/settings tests/contract`，`git commit -m "feat: isolate desktop bridge and credentials"`。
