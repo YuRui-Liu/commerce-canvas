@@ -9,9 +9,11 @@ import { Icon, LeftRail } from './LeftRail';
 import { RightPanel, toUpdate, type Draft } from './RightPanel';
 import { SettingsPanel, ThemeChoices } from './SettingsPanel';
 import { CanvasRegion } from './CanvasRegion';
+import type { CanvasHandle } from '../../../../../packages/canvas/src/Canvas';
 import './workspace.css';
 const bridge = window.commerceCanvas;
 export function Workspace() {
+  const canvas=useRef<CanvasHandle>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [project, setProject] = useState<Project>();
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -237,12 +239,12 @@ export function Workspace() {
           <h3>为创作备好素材</h3>
           <p>商品图片、参考图和文本，<br />都会保存在这里。</p>
           <small>PNG、JPG、WebP</small>
-        </div> : assets.map((a, i) => <button className="asset-card" key={`${project?.id}-${a.id}`} onClick={() => setView(a)}>{a.kind === 'image' ? <img src={`commerce-asset://asset/${a.id}/thumbnail`} alt={`素材图片 ${i + 1}`} /> : <div className="text-preview">{a.text}</div>}<span>{a.kind === 'image' ? `图片 ${i + 1}` : `文本 ${i + 1}`}</span>
+        </div> : assets.map((a, i) => <div key={`${project?.id}-${a.id}`}><button className="asset-card" onClick={() => setView(a)}>{a.kind === 'image' ? <img src={`commerce-asset://asset/${a.id}/thumbnail`} alt={`素材图片 ${i + 1}`} /> : <div className="text-preview">{a.text}</div>}<span>{a.kind === 'image' ? `图片 ${i + 1}` : `文本 ${i + 1}`}</span>
           <small>{a.kind === 'image' ? `${a.width} × ${a.height}` : '文本素材'}</small>
-        </button>)}</div>
+        </button><Button onClick={()=>canvas.current?.addAssets([a])} disabled={busy}>添加到画布</Button></div>)}</div>
         <div className="library-foot">素材保存在本机</div>
       </aside>}
-      <CanvasRegion project={project} right={right} busy={busy} toggleRight={() => setRight(!right)} upload={() => void importImages()} addText={() => open('text')} create={() => open('create')} />
+      <CanvasRegion ref={canvas} project={project} assets={assets} onView={setView} right={right} busy={busy} toggleRight={() => setRight(!right)} upload={() => void importImages()} addText={() => open('text')} create={() => open('create')} />
       {right && <RightPanel draft={draft} change={d => { setDraft(d); setDirty(true); setStatus('有未保存修改'); }} disabled={busy} save={() => void perform(async () => { await save(); })} conversation={conversations[project?.id ?? 'none'] ?? ''} setConversation={text => setConversations(c => ({ ...c, [project?.id ?? 'none']: text }))} settings={() => open('settings')} />}
     </div>
     <footer className="statusbar">
