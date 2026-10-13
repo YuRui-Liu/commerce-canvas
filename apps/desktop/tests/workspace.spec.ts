@@ -142,6 +142,7 @@ test('workspace keeps the newer revision when saving a conflicting draft as a co
     await page.getByRole('button', { name: '创建项目', exact: true }).first().click();
     await page.getByLabel('项目名称').fill('冲突项目');
     await page.getByRole('button', { name: '创建', exact: true }).click();
+    await expect(page.getByLabel('商品名称')).toBeVisible();
     const original = await page.evaluate(() => window.commerceCanvas.getCurrentProject());
     await page.getByLabel('商品名称').fill('未保存的商品');
     await page.getByRole('button', { name: '添加 SKU' }).click();

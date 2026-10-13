@@ -7,6 +7,7 @@ import { DomainError, type AssetVersion } from '../../../contracts/src';
 import { AssetRepository } from './repository';
 import { ThumbnailQueue } from './thumbnails';
 import { setAssetTrashed } from './trash';
+import type { AssetImportResult } from '../../../contracts/src/bridge';
 export type AssetVariant = 'original' | 'thumbnail';
 const hashBytes = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
 export class AssetService {
@@ -67,6 +68,20 @@ export class AssetService {
     if (typeof input.text !== 'string' || input.text.length > 1_000_000) throw new DomainError('INVALID_INPUT', 'Text is too large');
     return this.repository.insert({ id: randomUUID(), assetId: randomUUID(), projectId: input.projectId, kind: 'text', hash: hashBytes(Buffer.from(input.text)), mime: 'text/plain', relativePath: null, text: input.text, width: null, height: null, createdAt: new Date().toISOString() }, input.fileName ?? 'Text', null);
   }
+  async importImages(input: { projectId: string; files: { name: string; bytes: Uint8Array }[] }): Promise<AssetImportResult[]> {
+    this.repository.requireProject(input.projectId);
+    if (input.files.length > 100) throw new DomainError('TOO_MANY_FILES', 'Maximum 100 files');
+    const results: AssetImportResult[] = [];
+    for (const file of input.files) {
+      try { results.push({ name: file.name, ok: true, version: await this.importImage({ projectId: input.projectId, bytes: file.bytes, fileName: file.name }) }); }
+      catch (error) { results.push({ name: file.name, ok: false, error: error instanceof DomainError && error.code !== 'INVALID_IMAGE' ? 'IMPORT_FAILED' : 'INVALID_IMAGE' }); }
+    }
+    return results;
+  }
+  saveTextVersion(input: { projectId: string; assetId: string; text: string }): AssetVersion {
+    if (typeof input.text !== 'string' || input.text.length > 1_000_000) throw new DomainError('INVALID_INPUT', 'Text is too large');
+    return this.repository.appendTextVersion({ id: randomUUID(), assetId: input.assetId, projectId: input.projectId, kind: 'text', hash: hashBytes(Buffer.from(input.text)), mime: 'text/plain', relativePath: null, text: input.text, width: null, height: null, createdAt: new Date().toISOString() });
+  }
   async read(versionId: string, variant: AssetVariant = 'original', projectId?: string): Promise<Buffer> {
     if (variant !== 'original' && variant !== 'thumbnail') throw new DomainError('INVALID_INPUT', 'Unknown asset variant');
     const version = this.repository.get(versionId, projectId);
@@ -74,6 +89,7 @@ export class AssetService {
       if (variant !== 'original') throw new DomainError('NOT_FOUND', 'Text has no thumbnail');
       return Buffer.from(version.text!);
     }
+    if(variant==='thumbnail')await this.thumbnails.wait(version.hash);
     return readFileSync(this.path(version.hash, variant));
   }
   trashAsset(projectId: string, assetId: string) { setAssetTrashed(this.repository, projectId, assetId, true); }
@@ -86,7 +102,7 @@ export class AssetService {
       for (const hash of readdirSync(directory)) {
         if (!/^[a-f0-9]{64}$/.test(hash)) continue;
         const path = this.path(hash, variant);
-        if (!this.repository.hasHash(hash) && Date.now() - statSync(path).mtimeMs >= minimumAgeMs) { rmSync(path); removed++; }
+        if (!this.repository.hasHash(hash) && (minimumAgeMs === 0 || Date.now() - statSync(path).mtimeMs >= minimumAgeMs)) { rmSync(path); removed++; }
       }
     }
     return removed;

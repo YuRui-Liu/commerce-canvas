@@ -5,6 +5,7 @@ const Position = z.object({ x:z.number().finite(), y:z.number().finite() }).stri
 export const CanvasNodeSchema = z.object({
   id:Key, kind:z.enum(['asset','text','agent','output','group']), position:Position,
   parentId:Key.optional(), assetVersionId:IdSchema.optional(), agentDefinitionId:Key.optional(), runId:Key.optional(),
+  stale:z.boolean().optional(),
   width:z.number().positive().max(100000).optional(), height:z.number().positive().max(100000).optional(),
 }).strict();
 export const CanvasEdgeSchema = z.object({id:Key,source:Key,target:Key,role:InputRoleSchema}).strict();

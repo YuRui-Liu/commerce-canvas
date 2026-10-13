@@ -21,6 +21,20 @@ export class AssetRepository {
     if (!row || (projectId !== undefined && row.project_id !== projectId)) throw new DomainError('NOT_FOUND', 'Asset version does not exist');
     return AssetVersionSchema.parse(JSON.parse(String(row.metadata)));
   }
+  appendTextVersion(version: AssetVersion): AssetVersion {
+    const value = AssetVersionSchema.parse(version);
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      this.requireProject(value.projectId);
+      const asset = this.db.prepare('SELECT trashed_at FROM assets WHERE id = ? AND project_id = ?').get(value.assetId, value.projectId);
+      if (!asset) throw new DomainError('NOT_FOUND', 'Asset does not exist');
+      if (asset.trashed_at) throw new DomainError('ASSET_TRASHED', 'Restore asset before editing');
+      const previous = this.db.prepare('SELECT metadata FROM asset_versions WHERE asset_id = ? AND project_id = ? LIMIT 1').get(value.assetId, value.projectId);
+      if (!previous || AssetVersionSchema.parse(JSON.parse(String(previous.metadata))).kind !== 'text') throw new DomainError('INVALID_INPUT', 'Only text assets can be edited');
+      this.db.prepare('INSERT INTO asset_versions (id, asset_id, project_id, hash, metadata, orientation) VALUES (?, ?, ?, ?, ?, ?)').run(value.id, value.assetId, value.projectId, value.hash, JSON.stringify(value), 'null');
+      this.db.exec('COMMIT'); return value;
+    } catch (error) { this.db.exec('ROLLBACK'); throw error; }
+  }
   orientation(versionId: string): Orientation {
     this.get(versionId);
     return JSON.parse(String(this.db.prepare('SELECT orientation FROM asset_versions WHERE id = ?').get(versionId)!.orientation));

@@ -26,6 +26,8 @@ export class RuntimeService {
       case 'deleteProject': { const p = internalSchemas.deleteProject.parse(payload); this.projects.delete(p.projectId, p.expectedRevision); return null; }
       case 'listAssets': return this.assets.repository.list(internalSchemas.listAssets.parse(payload).projectId);
       case 'saveText': return this.assets.importText(internalSchemas.saveText.parse(payload));
+      case 'saveTextVersion': return this.assets.saveTextVersion(internalSchemas.saveTextVersion.parse(payload));
+      case 'importImages': return this.assets.importImages(internalSchemas.importImages.parse(payload));
       case 'importImageBytes': { const p = internalSchemas.importImageBytes.parse(payload); return this.assets.importImage({ projectId: p.projectId, bytes: p.bytes, fileName: p.name }); }
       case 'trashAsset': case 'restoreAsset': { const p = internalSchemas[method].parse(payload); this.assets[method](p.projectId, p.assetId); return null; }
       case 'getTheme': return this.settings.getTheme();

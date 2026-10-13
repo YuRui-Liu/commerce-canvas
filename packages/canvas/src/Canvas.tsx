@@ -6,6 +6,9 @@ import { InputRoleSchema, type AssetVersion, type InputRole } from '../../contra
 import { canConnect, groupNodes, ungroupNodes, layout, alignLeft } from './graph';
 import { commit, createHistory, undo, redo } from './history';
 import './canvas.css';
+import {changeEdgeRole,replaceNodeVersion} from './assetEditing';
+import {droppedInput,pastedInput,type AssetInput} from './AssetDropZone';
+import {isEditing} from './inputBindings';
 const roleNames:Record<InputRole,string>={product:'商品',scene:'场景',style:'风格',facts:'资料',instruction:'指令',copy:'文案'};
 type NodeData={node:CanvasNode;asset?:AssetVersion;view:(a:AssetVersion)=>void};
 type AssetBatch={items:AssetVersion[];position:{x:number;y:number};index:number;before?:CanvasDocument};
@@ -13,18 +16,18 @@ const Card=memo(function Card({data}:NodeProps<Node<NodeData>>){
   const {node,asset,view}=data;
   if(node.kind==='group')return <div className="graph-group-label">素材分组</div>;
   return <article className="graph-card">
-    <header>{node.kind==='agent'?'Agent':node.kind==='output'?'输出':asset?.kind==='text'?'文本素材':'图片素材'}<small>{node.kind==='agent'?'未配置':node.kind==='output'?'尚无产物':'本地引用'}</small></header>
+    <header>{node.kind==='agent'?'Agent':node.kind==='output'?'输出':asset?.kind==='text'?'文本素材':'图片素材'}<small>{node.stale?'需要更新':node.kind==='agent'?'未配置':node.kind==='output'?'尚无产物':'本地引用'}</small></header>
     {asset?.kind==='image'?<button className="nodrag nowheel graph-preview" onClick={()=>view(asset)} aria-label="查看原始素材"><img loading="lazy" src={`commerce-asset://asset/${asset.id}/thumbnail`} alt="商品素材"/></button>:asset?.kind==='text'?<button className="nodrag nowheel graph-text" onClick={()=>view(asset)}>{asset.text?.slice(0,200)}</button>:<p>{node.kind==='agent'?'连接输入素材，配置能力后再运行。':node.kind==='output'?'运行结果将以资产引用展示。':'素材不可用，请检查当前项目。'}</p>}
     <div className="graph-inputs">{InputRoleSchema.options.map(role=><div key={role}><Handle type="target" position={Position.Left} id={role} aria-label={`${roleNames[role]}输入`}/><span>{roleNames[role]}</span></div>)}</div>
     <Handle type="source" position={Position.Right} id="output" aria-label="输出连接"/>
   </article>;
 });
 const nodeTypes={asset:Card,text:Card,agent:Card,output:Card,group:Card};
-export type CanvasHandle={addAssets:(assets:AssetVersion[],position?:{x:number;y:number})=>void;getDocument:()=>CanvasDocument};
+export type CanvasHandle={addAssets:(assets:AssetVersion[],position?:{x:number;y:number})=>void;getDocument:()=>CanvasDocument;replaceVersion:(nodeId:string,versionId:string)=>void;setEdgeRole:(edgeId:string,role:InputRole)=>void};
 // document is the initial document for this mount. Use a load epoch/key for explicit
 // replacement; revisions emitted by onChange must not remount/reset gesture history.
-export type CanvasProps={document:CanvasDocument;assets:AssetVersion[];onChange:(doc:CanvasDocument)=>void;onView:(asset:AssetVersion)=>void;onSelectionChange?:(ids:string[])=>void};
-export const Canvas=forwardRef<CanvasHandle,CanvasProps>(function Canvas({document,assets,onChange,onView,onSelectionChange},ref){
+export type CanvasProps={document:CanvasDocument;assets:AssetVersion[];onChange:(doc:CanvasDocument)=>void;onView:(asset:AssetVersion)=>void;onSelectionChange?:(ids:string[])=>void;onAssetInput?:(input:AssetInput,position:{x:number;y:number})=>void};
+export const Canvas=forwardRef<CanvasHandle,CanvasProps>(function Canvas({document,assets,onChange,onView,onSelectionChange,onAssetInput},ref){
   const [history,setHistory]=useState(()=>createHistory(document));const current=useRef(document);const hist=useRef(history);hist.current=history;
   const [selection,setSelection]=useState<string[]>([]);const [message,setMessage]=useState('');const [snap,setSnap]=useState(true);
   const [edgeSelection,setEdgeSelection]=useState<string[]>([]);
@@ -84,7 +87,7 @@ export const Canvas=forwardRef<CanvasHandle,CanvasProps>(function Canvas({docume
     if(dragStart.current){const before=dragStart.current,after=current.current;setHistory(h=>commit({...h,present:before},after));dragStart.current=null;}
     addingRef.current=true;setAdding(true);advanceBatch();
   },[advanceBatch]);
-  useImperativeHandle(ref,()=>({addAssets,getDocument:()=>batches.current[0]?.before??current.current}),[addAssets]);
+  useImperativeHandle(ref,()=>({addAssets,getDocument:()=>batches.current[0]?.before??current.current,replaceVersion:(id,versionId)=>update(replaceNodeVersion(current.current,id,versionId)),setEdgeRole:(id,role)=>update(changeEdgeRole(current.current,id,role))}),[addAssets,update]);
   const data=history.present;
   const assetMap=useMemo(()=>new Map(assets.map(a=>[a.id,a])),[assets]);
   const nodes=useMemo(()=>data.nodes.map(n=>({id:n.id,type:n.kind,position:n.position,parentId:n.parentId,selected:selection.includes(n.id),style:n.kind==='group'?{width:n.width,height:n.height}:undefined,data:{node:n,asset:n.assetVersionId?assetMap.get(n.assetVersionId):undefined,view:onView}})),[data.nodes,selection,assetMap,onView]);
@@ -94,8 +97,12 @@ export const Canvas=forwardRef<CanvasHandle,CanvasProps>(function Canvas({docume
   const historyAction=(action:typeof undo)=>{if(addingRef.current)return;const result=action(hist.current);const next={...result,present:{...result.present,viewport:current.current.viewport}};setHistory(next);current.current=next.present;onChange(next.present);};
   const remove=()=>{const deleted=new Set(selection);let changed=true;while(changed){changed=false;for(const n of current.current.nodes)if(n.parentId&&deleted.has(n.parentId)&&!deleted.has(n.id)){deleted.add(n.id);changed=true;}}
     update({...current.current,nodes:current.current.nodes.filter(n=>!deleted.has(n.id)),edges:current.current.edges.filter(e=>!deleted.has(e.source)&&!deleted.has(e.target)&&!edgeSelection.includes(e.id))});setSelection([]);setEdgeSelection([]);};
-  return <div className="graph-workspace" tabIndex={0} aria-label="无限画布" aria-busy={adding} onKeyDown={event=>{
-    const el=event.target as HTMLElement;if(event.nativeEvent.isComposing||el.isContentEditable||el.closest('input,textarea,select'))return;
+  return <div className="graph-workspace" tabIndex={0} aria-label="无限画布" aria-busy={adding}
+    onDragOver={event=>{if(!isEditing(event.target)){event.preventDefault();event.dataTransfer.dropEffect='copy';}}}
+    onDrop={event=>{const input=droppedInput(event);if(!input)return;event.preventDefault();const position=flow.current?.screenToFlowPosition({x:event.clientX,y:event.clientY},{snapToGrid:false});if(position)onAssetInput?.(input,position);}}
+    onPaste={event=>{const input=pastedInput(event);if(!input)return;event.preventDefault();const bounds=event.currentTarget.getBoundingClientRect();const position=flow.current?.screenToFlowPosition({x:bounds.x+bounds.width/2,y:bounds.y+bounds.height/2},{snapToGrid:false});if(position)onAssetInput?.(input,position);}}
+    onKeyDown={event=>{
+    if(event.nativeEvent.isComposing||isEditing(event.target))return;
     if(addingRef.current){if(event.key==='Delete'||event.key==='Backspace'||((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='z'))event.preventDefault();return;}
     if(event.key==='Delete'||event.key==='Backspace'){event.preventDefault();remove();}
     if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='z'){event.preventDefault();historyAction(event.shiftKey?redo:undo);}

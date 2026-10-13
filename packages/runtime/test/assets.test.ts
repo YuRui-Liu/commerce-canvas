@@ -11,6 +11,30 @@ let directory: string, db: ReturnType<typeof openDatabase>, service: AssetServic
 beforeEach(() => { directory = mkdtempSync(join(tmpdir(), 'cc-assets-')); db = openDatabase(join(directory, 'db')); projectId = new ProjectRepository(db).create('Test').id; service = new AssetService(db, directory); });
 afterEach(async () => { await service?.thumbnails.drain(); db?.close(); rmSync(directory, { recursive: true, force: true }); });
 const image = () => sharp({ create: { width: 80, height: 40, channels: 3, background: 'red' } }).jpeg().withMetadata({ orientation: 6 }).toBuffer();
+it('serves the thumbnail immediately after import without racing background generation',async()=>{
+ const version=await service.importImage({projectId,bytes:await image(),fileName:'new.jpg'});
+ const thumbnail=await service.read(version.id,'thumbnail',projectId);
+ expect((await sharp(thumbnail).metadata()).format).toBe('webp');
+});
+it('imports batches independently and returns safe errors while retaining successful items', async () => {
+  const result = await service.importImages({ projectId, files: [{ name: 'good.jpg', bytes: await image() }, { name: 'bad.png', bytes: Buffer.from('bad') }, { name: 'large.png', bytes: Buffer.alloc(50 * 1024 * 1024 + 1) }] });
+  expect(result.map(item => item.ok)).toEqual([true, false, false]);
+  expect(result[1]).toEqual({ name: 'bad.png', ok: false, error: 'INVALID_IMAGE' });
+  expect(service.repository.list(projectId)).toHaveLength(1);
+  await expect(service.importImages({ projectId, files: Array.from({ length: 101 }, () => ({ name: 'x', bytes: Buffer.from('x') })) })).rejects.toThrow(/TOO_MANY_FILES/);
+});
+it('creates immutable text versions within the same asset and rejects foreign, image and trashed assets', async () => {
+  const first = service.importText({ projectId, text: 'first' });
+  const next = service.saveTextVersion({ projectId, assetId: first.assetId, text: 'second' });
+  expect(next.assetId).toBe(first.assetId); expect(next.id).not.toBe(first.id);
+  expect((await service.read(first.id)).toString()).toBe('first'); expect((await service.read(next.id)).toString()).toBe('second');
+  const other = new ProjectRepository(db).create('Other').id;
+  expect(() => service.saveTextVersion({ projectId: other, assetId: first.assetId, text: 'bad' })).toThrow(/NOT_FOUND/);
+  const picture = await service.importImage({ projectId, bytes: await image(), fileName: 'x' });
+  expect(() => service.saveTextVersion({ projectId, assetId: picture.assetId, text: 'bad' })).toThrow(/INVALID_INPUT/);
+  service.trashAsset(projectId, first.assetId);
+  expect(() => service.saveTextVersion({ projectId, assetId: first.assetId, text: 'bad' })).toThrow(/ASSET_TRASHED/);
+});
 it('deduplicates immutable original bytes with independent references under concurrency', async () => {
   const bytes = await image(); const [a,b] = await Promise.all([service.importImage({ projectId, bytes, fileName: '../../evil' }),service.importImage({ projectId, bytes, fileName: 'other.jpg' })]);
   expect(a.hash).toBe(b.hash); expect(a.assetId).not.toBe(b.assetId); expect(a.id).not.toBe(b.id); expect(await service.read(a.id)).toEqual(bytes);

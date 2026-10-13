@@ -1,22 +1,27 @@
-import { forwardRef, useImperativeHandle, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import type { AssetVersion, Project } from '../../../../../packages/contracts/src/domain';
 import type { CanvasDocument } from '../../../../../packages/contracts/src/canvas';
 import { Canvas, type CanvasHandle } from '../../../../../packages/canvas/src/Canvas';
 import { Button } from '../../../../../packages/ui/src/Button';
 import { Icon } from './LeftRail';
+import type {AssetInput} from '../../../../../packages/canvas/src/AssetDropZone';
 export const CanvasRegion=forwardRef<CanvasHandle,{
   project?:Project;assets:AssetVersion[];onView:(asset:AssetVersion)=>void;right:boolean;busy:boolean;
   toggleRight:()=>void;upload:()=>void;addText:()=>void;create:()=>void;
-}>(function CanvasRegion({project,assets,onView,right,busy,toggleRight,upload,addText,create},ref){
+  onAssetInput:(input:AssetInput,position:{x:number;y:number})=>void;onSelectionChange:(ids:string[])=>void;onDocumentChange:(doc:CanvasDocument)=>void;
+}>(function CanvasRegion({project,assets,onView,right,busy,toggleRight,upload,addText,create,onAssetInput,onSelectionChange,onDocumentChange},ref){
   const [documents,setDocuments]=useState<Record<string,CanvasDocument>>({});
   const canvas=useRef<CanvasHandle>(null);
   const id=project?.id??'unassigned';
   const document=documents[id]??{id,projectId:project?.id??null,revision:1,nodes:[],edges:[],viewport:{x:0,y:0,zoom:1}};
-  useImperativeHandle(ref,()=>({addAssets:(items,position)=>canvas.current?.addAssets(items,position),getDocument:()=>canvas.current?.getDocument()??document}),[document]);
+  // A restored in-memory session must also restore the inspector's document;
+  // Canvas deliberately emits changes only for edits, not initial mounting.
+  useEffect(()=>{onDocumentChange(document);},[id,onDocumentChange]);
+  useImperativeHandle(ref,()=>({addAssets:(items,position)=>canvas.current?.addAssets(items,position),getDocument:()=>canvas.current?.getDocument()??document,replaceVersion:(id,versionId)=>canvas.current?.replaceVersion(id,versionId),setEdgeRole:(id,role)=>canvas.current?.setEdgeRole(id,role)}),[document]);
   return <main className="canvas-main">
     <div className="canvas-toolbar"><div><strong>{project?.name??'商品创作工作区'}</strong><small>画布</small></div><Button variant="quiet" aria-pressed={right} onClick={toggleRight}>{right?'收起助手':'展开助手'}</Button></div>
     <div className="canvas-surface">
-      {project&&<Canvas key={id} ref={canvas} document={document} assets={assets} onView={onView} onChange={next=>setDocuments(d=>({...d,[id]:next}))}/>}
+      {project&&<Canvas key={id} ref={canvas} document={document} assets={assets} onView={onView} onAssetInput={onAssetInput} onSelectionChange={onSelectionChange} onChange={next=>{setDocuments(d=>({...d,[id]:next}));onDocumentChange(next);}}/>}
       {!document.nodes.length&&<div className="canvas-empty" style={{pointerEvents:'none',position:'relative',zIndex:2}}>
         <span className="canvas-emblem"><Icon kind="assets"/></span><p className="eyebrow">你的下一张商品图，从这里开始</p>
         <h1>{project?'给商品一个新的表达。':'把商品与灵感，放在一起。'}</h1>

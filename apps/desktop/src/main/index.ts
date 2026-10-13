@@ -6,7 +6,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { RuntimeClient } from './runtimeClient';
 import { CredentialStore } from './credentials';
 import { validateSender } from './ipc';
-import { parseRequest, requestSchemas } from '../../../../packages/contracts/src/bridge';
+import { parseRequest, requestSchemas, type AssetImportResult } from '../../../../packages/contracts/src/bridge';
 import { assetScheme } from './assetProtocol';
 protocol.registerSchemesAsPrivileged([assetScheme]);
 const isolated = process.env.COMMERCECANVAS_TEST_USER_DATA;
@@ -48,18 +48,22 @@ void app.whenReady().then(async () => {
       if (projectId && !await runtime.request('getProject', { projectId })) throw new Error('NOT_FOUND');
       currentProject = projectId; return currentProject;
     }
-    if (method === 'importAssets') {
+    if (method === 'importAssets' || method === 'importAssetsBatch') {
       const { projectId } = requestSchemas.importAssets.parse(payload);
       if (!await runtime.request('getProject', { projectId })) throw new Error('NOT_FOUND');
       const selected = await dialog.showOpenDialog(window, { properties: ['openFile', 'multiSelections'], filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp'] }] });
       if (selected.canceled) return [];
       if (selected.filePaths.length > 100) throw new Error('TOO_MANY_FILES');
-      const result = [];
+      const result:AssetImportResult[] = [];
       for (const file of selected.filePaths) {
-        if ((await stat(file)).size > 50 * 1024 * 1024) throw new Error('INVALID_IMAGE');
-        result.push(await runtime.request('importImageBytes', { projectId, bytes: new Uint8Array(await readFile(file)), name: basename(file).slice(0, 200) }));
+        const name=basename(file).slice(0,200);
+        try{
+          if ((await stat(file)).size > 50 * 1024 * 1024){result.push({name,ok:false,error:'INVALID_IMAGE'});continue;}
+          const imported=await runtime.request('importImages',{projectId,files:[{name,bytes:new Uint8Array(await readFile(file))}]}) as AssetImportResult[];
+          result.push(...imported);
+        }catch{result.push({name,ok:false,error:'IMPORT_FAILED'});}
       }
-      return result;
+      return method==='importAssetsBatch'?result:result.flatMap(r=>r.ok?[r.version]:[]);
     }
     const result = await runtime.request(method as string, payload);
     if (method === 'deleteProject' && requestSchemas.deleteProject.parse(payload).projectId === currentProject) currentProject = null;

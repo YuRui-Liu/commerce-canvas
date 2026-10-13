@@ -11,6 +11,13 @@ import { SettingsPanel, ThemeChoices } from './SettingsPanel';
 import { CanvasRegion } from './CanvasRegion';
 import type { CanvasHandle } from '../../../../../packages/canvas/src/Canvas';
 import './workspace.css';
+import {AssetLibrary} from './AssetLibrary';
+import {AssetInspector} from './AssetInspector';
+import {ImageViewer} from '../../../../../packages/ui/src/ImageViewer';
+import {ImageCompare} from '../../../../../packages/ui/src/ImageCompare';
+import type {AssetInput} from '../../../../../packages/canvas/src/AssetDropZone';
+import type {CanvasDocument} from '../../../../../packages/contracts/src/canvas';
+import type {AssetImportResult} from '../../../../../packages/contracts/src/bridge';
 const bridge = window.commerceCanvas;
 export function Workspace() {
   const canvas=useRef<CanvasHandle>(null);
@@ -31,12 +38,18 @@ export function Workspace() {
   const [conversations, setConversations] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState('');
   const [view, setView] = useState<AssetVersion | null>(null);
+  const [comparison,setComparison]=useState<AssetVersion[]>([]);
+  const [selection,setSelection]=useState<string[]>([]);
+  const [graph,setGraph]=useState<CanvasDocument>();
+  const [textDrafts,setTextDrafts]=useState<Record<string,string>>({});
+  const [importResults,setImportResults]=useState<AssetImportResult[]>([]);
   const { error: themeError } = useTheme();
   const refresh = async () => setProjects(await bridge.listProjects());
   async function load(id: string) {
     // Release decoded images before changing the main process asset-access context.
     setAssets([]);
     setView(null);
+    setComparison([]);setSelection([]);setGraph(undefined);
     const data = await bridge.getProject({ projectId: id });
     if (!data)
       throw Error('NOT_FOUND');
@@ -175,8 +188,9 @@ export function Workspace() {
     }
     await perform(async () => {
       try {
-        const imported = await bridge.importAssets({ projectId: project.id });
-        setStatus(imported.length ? `已导入 ${imported.length} 张图片` : '已取消导入');
+        const imported = await bridge.importAssetsBatch({ projectId: project.id });
+        setImportResults(imported);
+        setStatus(imported.length ? `已导入 ${imported.filter(r=>r.ok).length} 张图片，失败 ${imported.filter(r=>!r.ok).length} 项` : '已取消导入');
       } catch {
         setStatus('部分图片导入失败，请检查文件格式或大小；已导入素材已保留。');
       } finally {
@@ -184,6 +198,35 @@ export function Workspace() {
         setLibrary(true);
       }
     });
+  }
+  async function receiveAsset(input:AssetInput,position:{x:number;y:number}){
+    if(!project)return;
+    if(input.versionId){const asset=assets.find(a=>a.id===input.versionId);if(asset)canvas.current?.addAssets([asset],position);return;}
+    await perform(async()=>{
+      setStatus('正在复制素材到本机受管存储…');setImportResults([]);
+      if(input.files){
+        if(input.files.length>100){setStatus('一次最多导入 100 个文件');return;}
+        const results:AssetImportResult[]=[];
+        for(const [index,file] of input.files.entries()){
+          setStatus(`正在导入 ${index+1} / ${input.files.length}：${file.name}`);
+          if(file.size>50*1024*1024){results.push({name:file.name,ok:false,error:'INVALID_IMAGE'});continue;}
+          try{results.push(...await bridge.importImages({projectId:project.id,files:[{name:file.name,bytes:new Uint8Array(await file.arrayBuffer())}]}));}
+          catch{results.push({name:file.name,ok:false,error:'IMPORT_FAILED'});}
+          setImportResults([...results]);
+        }
+        setImportResults(results);setAssets(await bridge.listAssets({projectId:project.id}));
+        canvas.current?.addAssets(results.flatMap(r=>r.ok?[r.version]:[]),position);
+        setStatus(`导入完成：${results.filter(r=>r.ok).length} 成功，${results.filter(r=>!r.ok).length} 失败`);
+      }else if(input.text){const asset=await bridge.saveText({projectId:project.id,text:input.text});setAssets(await bridge.listAssets({projectId:project.id}));canvas.current?.addAssets([asset],position);setStatus('文本已保存并添加到画布');}
+    });
+  }
+  const selectedNode=graph?.nodes.find(n=>n.id===selection[0]);
+  const selectedAsset=assets.find(a=>a.id===selectedNode?.assetVersionId);
+  const draftKey=selectedNode?`${project?.id}:${selectedNode.id}`:'';
+  async function saveNodeText(){
+    if(!project||!selectedNode||selectedAsset?.kind!=='text')return;
+    const nodeId=selectedNode.id,assetId=selectedAsset.assetId,text=textDrafts[draftKey]??selectedAsset.text??'';
+    await perform(async()=>{const version=await bridge.saveTextVersion({projectId:project.id,assetId,text});setAssets(await bridge.listAssets({projectId:project.id}));canvas.current?.replaceVersion(nodeId,version.id);setStatus('已保存文本新版本；下游需要更新');});
   }
   async function saveCopy() {
     await perform(async () => {
@@ -234,18 +277,18 @@ export function Workspace() {
             <Icon kind="upload" />上传图片</Button>
           <Button onClick={() => project ? open('text') : open('create')} disabled={busy}>添加文本</Button>
         </div>
-        <div className="asset-list">{assets.length === 0 ? <div className="library-empty">
+        {assets.length === 0 ? <div className="library-empty">
           <Icon kind="assets" />
           <h3>为创作备好素材</h3>
           <p>商品图片、参考图和文本，<br />都会保存在这里。</p>
           <small>PNG、JPG、WebP</small>
-        </div> : assets.map((a, i) => <div key={`${project?.id}-${a.id}`}><button className="asset-card" onClick={() => setView(a)}>{a.kind === 'image' ? <img src={`commerce-asset://asset/${a.id}/thumbnail`} alt={`素材图片 ${i + 1}`} /> : <div className="text-preview">{a.text}</div>}<span>{a.kind === 'image' ? `图片 ${i + 1}` : `文本 ${i + 1}`}</span>
-          <small>{a.kind === 'image' ? `${a.width} × ${a.height}` : '文本素材'}</small>
-        </button><Button onClick={()=>canvas.current?.addAssets([a])} disabled={busy}>添加到画布</Button></div>)}</div>
+        </div> : <AssetLibrary assets={assets} busy={busy} onView={setView} onAdd={a=>canvas.current?.addAssets([a])} onCompare={a=>setComparison(previous=>previous.length===1?[previous[0],a]:[a])}/>}
+        {comparison.length===1&&<p role="status">已选 1 张，请再选择一张对比。<Button onClick={()=>setComparison([])}>取消对比</Button></p>}
+        {!!importResults.length&&<ul className="import-results" aria-label="逐文件导入结果">{importResults.map((result,index)=><li key={index}>{result.name}：{result.ok?'成功':'失败（请检查格式、大小或文件）'}</li>)}</ul>}
         <div className="library-foot">素材保存在本机</div>
       </aside>}
-      <CanvasRegion ref={canvas} project={project} assets={assets} onView={setView} right={right} busy={busy} toggleRight={() => setRight(!right)} upload={() => void importImages()} addText={() => open('text')} create={() => open('create')} />
-      {right && <RightPanel draft={draft} change={d => { setDraft(d); setDirty(true); setStatus('有未保存修改'); }} disabled={busy} save={() => void perform(async () => { await save(); })} conversation={conversations[project?.id ?? 'none'] ?? ''} setConversation={text => setConversations(c => ({ ...c, [project?.id ?? 'none']: text }))} settings={() => open('settings')} />}
+      <CanvasRegion ref={canvas} project={project} assets={assets} onView={setView} right={right} busy={busy} toggleRight={() => setRight(!right)} upload={() => void importImages()} addText={() => open('text')} create={() => open('create')} onAssetInput={(input,position)=>void receiveAsset(input,position)} onDocumentChange={setGraph} onSelectionChange={setSelection}/>
+      {right && (selectedNode&&graph?<AssetInspector node={selectedNode} asset={selectedAsset} document={graph} draft={textDrafts[draftKey]??selectedAsset?.text??''} onDraft={text=>setTextDrafts(d=>({...d,[draftKey]:text}))} onSave={()=>void saveNodeText()} onRole={(id,role)=>canvas.current?.setEdgeRole(id,role)} onClose={()=>setSelection([])} onFacts={()=>{setSelection([]);requestAnimationFrame(()=>document.querySelector<HTMLTextAreaElement>('.right-panel textarea')?.focus());}} busy={busy}/>:<RightPanel draft={draft} change={d => { setDraft(d); setDirty(true); setStatus('有未保存修改'); }} disabled={busy} save={() => void perform(async () => { await save(); })} conversation={conversations[project?.id ?? 'none'] ?? ''} setConversation={text => setConversations(c => ({ ...c, [project?.id ?? 'none']: text }))} settings={() => open('settings')} />)}
     </div>
     <footer className="statusbar">
       <span role="status">{themeError || status}{project && !conflict ? ` · 修订 ${project.revision}` : ''}</span>
@@ -269,14 +312,15 @@ export function Workspace() {
       if (!busy)
         setModal(null);
     }}>
-      <form onSubmit={e => { e.preventDefault(); void submit(); }}>
+      <form onKeyDown={e=>{if(e.key==='Enter'&&(e.nativeEvent.isComposing||e.keyCode===229)){e.preventDefault();e.stopPropagation();}}} onSubmit={e => { e.preventDefault(); void submit(); }}>
         <label>{modal === 'text' ? '文本内容' : '项目名称'}{modal === 'text' ? <textarea autoFocus rows={6} maxLength={1000000} value={value} onChange={e => setValue(e.target.value)} /> : <input autoFocus maxLength={200} value={value} onChange={e => setValue(e.target.value)} />}</label>{modalError && <p role="alert" className="error">{modalError}</p>}<div className="dialog-actions">
           <Button disabled={busy} onClick={() => setModal(null)}>取消</Button>
           <Button type="submit" variant="primary" disabled={busy}>{modal === 'create' ? '创建' : modal === 'rename' ? '保存名称' : '添加到素材库'}</Button>
         </div>
       </form>
     </Dialog>}
-    {view && <Dialog title={view.kind === 'image' ? '原始图片' : '文本素材'} onClose={() => setView(null)}>{view.kind === 'image' ? <img className="asset-viewer" src={`commerce-asset://asset/${view.id}/original`} alt="原始商品素材" /> : <p className="text-full">{view.text}</p>}<small>原始素材 · {view.kind === 'image' ? `${view.width} × ${view.height}` : '文本'}</small>
-    </Dialog>}
+    {view?.kind==='image'&&<ImageViewer asset={view} onClose={()=>setView(null)}/>}
+    {view?.kind==='text'&&<Dialog title="文本素材" onClose={()=>setView(null)}><p className="text-full">{view.text}</p></Dialog>}
+    {comparison.length===2&&<ImageCompare assets={[comparison[0],comparison[1]]} onClose={()=>setComparison([])}/>}
   </div>;
 }
