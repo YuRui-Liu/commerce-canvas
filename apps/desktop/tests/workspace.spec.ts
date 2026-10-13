@@ -3,6 +3,45 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import sharp from 'sharp';
+test('workspace edits 100 existing facts and rejects a 101st without trapping the draft', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'commercecanvas-e2e-facts-'));
+  const app = await electron.launch({ ...(process.env.COMMERCECANVAS_EXECUTABLE ? { executablePath: process.env.COMMERCECANVAS_EXECUTABLE, args: [] } : { args: [resolve('apps/desktop/dist/main/index.js')] }), env: { ...process.env, COMMERCECANVAS_TEST_USER_DATA: root } });
+  try {
+    const page = await app.firstWindow();
+    const original = await page.evaluate(async () => {
+      const project = await window.commerceCanvas.createProject({ name: '满额事实项目' });
+      const facts = Object.fromEntries(Array.from({ length: 100 }, (_, i) => [`事实${i}`, `内容${i}`]));
+      await window.commerceCanvas.updateProject({ projectId: project.id, expectedRevision: 1, update: { facts } });
+      return project.id;
+    });
+    await page.reload();
+    await page.getByLabel('商品项目', { exact: true }).selectOption(original);
+    await page.getByLabel('事实0', { exact: true }).fill('已修订');
+    await page.getByRole('button', { name: '保存资料' }).click();
+    await expect(page.getByRole('status')).toContainText('已保存');
+    await page.getByLabel('新事实名称').fill('第101条');
+    await page.getByRole('button', { name: '添加', exact: true }).click();
+    await expect(page.getByRole('alert')).toContainText('最多 100 条');
+    await expect(page.getByLabel('第101条', { exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: '删除事实 事实99', exact: true }).click();
+    await page.getByRole('button', { name: '添加', exact: true }).click();
+    await page.getByLabel('第101条', { exact: true }).fill('替换后的第100条');
+    await page.getByRole('button', { name: '保存资料' }).click();
+    await expect(page.getByRole('status')).toContainText('已保存');
+    const saved = await page.evaluate(async id => (await window.commerceCanvas.getProject({ projectId: id }))!.project, original);
+    expect(Object.keys(saved.facts)).toHaveLength(100);
+    expect(saved.facts).toMatchObject({ '事实0': '已修订', '第101条': '替换后的第100条' });
+    expect(saved.facts).not.toHaveProperty('商品名称');
+    expect(saved.facts).not.toHaveProperty('核心卖点');
+    expect(saved.facts).not.toHaveProperty('事实99');
+    await page.getByLabel('事实0', { exact: true }).fill('切换前修改');
+    await page.getByRole('button', { name: '创建项目', exact: true }).first().click();
+    await page.getByLabel('项目名称').fill('仍可创建');
+    await page.getByRole('button', { name: '创建', exact: true }).click();
+    await page.getByLabel('商品项目', { exact: true }).selectOption(original);
+    await expect(page.getByLabel('事实0', { exact: true })).toHaveValue('切换前修改');
+  } finally { await app.close(); rmSync(root, { recursive: true, force: true }); }
+});
 test('workspace persists drafts, protects revisions and restores both themes', async () => {
   const root = mkdtempSync(join(tmpdir(), 'commercecanvas-e2e-workspace-'));
   const launch = () => electron.launch({ ...(process.env.COMMERCECANVAS_EXECUTABLE ? { executablePath: process.env.COMMERCECANVAS_EXECUTABLE, args: [] } : { args: [resolve('apps/desktop/dist/main/index.js')] }), env: { ...process.env, COMMERCECANVAS_TEST_USER_DATA: root } });

@@ -20,7 +20,7 @@ export function CanvasRegion({ project, right, busy, toggleRight, upload, addTex
         <div className="empty-actions">{project ? <>
           <Button variant="primary" disabled={busy} onClick={upload}><Icon kind="upload"/>上传图片</Button>
           <Button onClick={addText} disabled={busy}>添加文本</Button>
-        </> : <Button variant="primary" onClick={create}>创建项目</Button>}</div>
+        </> : <Button variant="primary" disabled={busy} onClick={create}>创建项目</Button>}</div>
         <small>当前可整理本地资料与素材，画布编排即将接入。</small>
       </div>
       <div className="canvas-caption">本地工作空间 <span>·</span> 图片保持原始色彩</div>
