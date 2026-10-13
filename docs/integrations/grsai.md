@@ -1,6 +1,6 @@
 # GRSai 直接接入契约
 
-核验日期：2026-10-12。状态：公开接口已核对，尚未使用用户凭证真实出图。
+核验日期：2026-10-13。状态：公开接口已核对；真实图生图调用成功，但请求 1024×1024 返回 1254×1254，精确尺寸验收不通过，详见 `docs/evidence/grsai.md`。
 
 来源为 [GRSai 公告](https://grsai.ai/zh/dashboard/announcements) 链接的 [生成接口](https://qmy27nhsd9.apifox.cn/452409160e0) 及其 [OpenAPI 文本](https://qmy27nhsd9.apifox.cn/452409160e0.md)，[查询接口](https://qmy27nhsd9.apifox.cn/452409577e0)。公告关联的 [ComfyUI 客户端](https://github.com/31702160136/ComfyUI-GrsAI/blob/main/api_client.py) 可交叉核对。
 
