@@ -2,9 +2,10 @@
 import { DatabaseSync } from 'node:sqlite';
 import foundationSql from './migrations/001-foundation.sql?raw';
 import assetsSql from './migrations/002-assets.sql?raw';
+import settingsSql from './migrations/003-settings.sql?raw';
 
 // Vite/Vitest inline the SQL so packaged apps do not need the source tree.
-const migrations = [{ version: 1, sql: foundationSql }, { version: 2, sql: assetsSql }];
+const migrations = [{ version: 1, sql: foundationSql }, { version: 2, sql: assetsSql }, { version: 3, sql: settingsSql }];
 
 export function openDatabase(file: string): DatabaseSync {
   const db = new DatabaseSync(file);
