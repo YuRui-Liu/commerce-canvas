@@ -66,7 +66,7 @@ expect(() => repository.updateFacts(project.id, 1, {})).toThrow('REVISION_CONFLI
 
 **创建：** `packages/runtime/src/assets/import.ts`、`repository.ts`、`thumbnails.ts`、`trash.ts`；`apps/desktop/src/main/assetProtocol.ts`；测试 `packages/runtime/test/assets.test.ts`。
 
-- [ ] 创建授权 PNG 和 JPEG 夹具到 `tests/fixtures/assets/`。测试同文件重复导入复用内容哈希，但任务引用保持独立；文本不写成图片；删除节点引用后素材仍存在；非法图片字节拒绝导入。
+- [x] 创建授权 PNG 和 JPEG 夹具到 `tests/fixtures/assets/`。测试同文件重复导入复用内容哈希，但任务引用保持独立；文本不写成图片；删除节点引用后素材仍存在；非法图片字节拒绝导入。
 
 ```ts
 const first = await service.importImage({ projectId, bytes, fileName: 'a.png' });
@@ -77,10 +77,10 @@ await expect(service.importImage({ projectId, bytes: Buffer.from('not image'), f
   .rejects.toThrow('INVALID_IMAGE');
 ```
 
-- [ ] 运行 `npm test -- packages/runtime/test/assets.test.ts`，确认缺少实现时失败。实现 `AssetService.importImage`、`importText`、`read(versionId)`；先用 Sharp 解码和读取 EXIF 方向，再计算持久化字节哈希，保留原图与显示方向信息；文件写临时名、原子重命名后落引用。受管文件限定在 runtime dataRoot，不按用户文件名拼接路径。
-- [ ] 缩略图排队异步生成，画布优先读取缩略图；详情加载原图。注册 `commerce-asset://` 协议，以版本 ID 查路径，不接受任意本地路径或 `..`。
-- [ ] `trashAsset(assetId)` 在有活动任务引用时拒绝；无活动引用时软删除，`restoreAsset(assetId)` 恢复。延迟清理仅删除不再引用的文件。增加引用检查和路径穿越测试。
-- [ ] 执行指定测试、导入含 EXIF 旋转图进行视觉检查。提交 `git add packages/runtime/src/assets apps/desktop/src/main/assetProtocol.ts packages/runtime/test/assets.test.ts tests/fixtures/assets`，`git commit -m "feat: manage immutable local asset versions"`。
+- [x] 运行 `npm test -- packages/runtime/test/assets.test.ts`，确认缺少实现时失败。实现 `AssetService.importImage`、`importText`、`read(versionId)`；先用 Sharp 解码和读取 EXIF 方向，再计算持久化字节哈希，保留原图与显示方向信息；文件写临时名、原子重命名后落引用。受管文件限定在 runtime dataRoot，不按用户文件名拼接路径。
+- [x] 缩略图排队异步生成，画布优先读取缩略图；详情加载原图。注册 `commerce-asset://` 协议，以版本 ID 查路径，不接受任意本地路径或 `..`。
+- [x] `trashAsset(assetId)` 在有活动任务引用时拒绝；无活动引用时软删除，`restoreAsset(assetId)` 恢复。延迟清理仅删除不再引用的文件。增加引用检查和路径穿越测试。
+- [x] 执行指定测试、导入含 EXIF 旋转图进行视觉检查。提交 `git add packages/runtime/src/assets apps/desktop/src/main/assetProtocol.ts packages/runtime/test/assets.test.ts tests/fixtures/assets`，`git commit -m "feat: manage immutable local asset versions"`。
 
 ## F4 类型化桥接、凭证与设置
 
