@@ -22,7 +22,7 @@ export function RightPanel({ draft, change, disabled, save, panel, savedMessages
   settings: () => void;
 }) {
   const tab = panel.activeTab;
-  const setTab = (activeTab: PanelState['activeTab']) => changePanel({ ...panel, activeTab });
+  const setTab = (activeTab: PanelState['activeTab']) => { if (!disabled) changePanel({ ...panel, activeTab }); };
   const [factName, setFactName] = useState('');
   const [factError, setFactError] = useState('');
   const configRef = useRef<HTMLButtonElement>(null);
@@ -76,8 +76,8 @@ export function RightPanel({ draft, change, disabled, save, panel, savedMessages
       <span className="local-badge">本地草稿</span>
     </div>
     <div className="tabs" role="tablist" aria-label="助手面板" onKeyDown={key}>
-      <button ref={configRef} role="tab" id="config-tab" aria-controls="config-panel" aria-selected={tab === 'config'} tabIndex={tab === 'config' ? 0 : -1} onClick={() => setTab('config')}>配置</button>
-      <button ref={chatRef} role="tab" id="chat-tab" aria-controls="chat-panel" aria-selected={tab === 'chat'} tabIndex={tab === 'chat' ? 0 : -1} onClick={() => setTab('chat')}>对话</button>
+      <button disabled={disabled} ref={configRef} role="tab" id="config-tab" aria-controls="config-panel" aria-selected={tab === 'config'} tabIndex={tab === 'config' ? 0 : -1} onClick={() => setTab('config')}>配置</button>
+      <button disabled={disabled} ref={chatRef} role="tab" id="chat-tab" aria-controls="chat-panel" aria-selected={tab === 'chat'} tabIndex={tab === 'chat' ? 0 : -1} onClick={() => setTab('chat')}>对话</button>
     </div>
     <div className="panel-scroll" role="tabpanel" id="config-panel" aria-labelledby="config-tab" hidden={tab !== 'config'}>
       {!draft ? <p className="muted">创建或选择商品项目，开始整理创作资料。</p> : <fieldset disabled={disabled} className="project-form">

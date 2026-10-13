@@ -9,6 +9,9 @@ test('typed bridge persists projects, assets and theme and isolates asset access
   let app = await launch();
   try {
     const page = await app.firstWindow();
+    // Direct bridge mutation must not race the initial UI's getCurrentProject/load.
+    // Actual users cannot switch projects until this initialization has completed.
+    await expect(page.getByRole('status')).toHaveText('本地工作区');
     const image = [...await sharp({ create: { width: 3, height: 4, channels: 4, background: '#f00' } }).png().toBuffer()];
     const ids = await page.evaluate(async bytes => {
       const bridge = window.commerceCanvas;
@@ -24,11 +27,18 @@ test('typed bridge persists projects, assets and theme and isolates asset access
     const selectedProject = await page.evaluate(async () => { const p = await window.commerceCanvas.createProject({ name: 'Other' }); await window.commerceCanvas.setCurrentProject({ projectId: p.id }); return p.id; });
     // Reload releases decoded Image resources; verify a new protocol request, not a DOM memory-cache hit.
     await page.reload();
+    expect(await page.evaluate(() => window.commerceCanvas.getCurrentProject({}))).toBe(selectedProject);
     expect(await page.evaluate(url => new Promise(resolve => { const img = new Image(); img.onload = () => resolve('loaded'); img.onerror = () => resolve('denied'); img.src = url; }), url)).toBe('denied');
     await app.close(); app = await launch();
     const restored = await app.firstWindow();
     expect(await restored.evaluate(() => window.commerceCanvas.getTheme({}))).toBe('editorial');
     expect(await restored.evaluate(id => window.commerceCanvas.listAssets({ projectId: id }), ids.projectId)).toHaveLength(2);
     expect(await restored.evaluate(() => window.commerceCanvas.getCurrentProject({}))).toBe(selectedProject);
-  } finally { await app.close(); rmSync(root, { recursive: true, force: true }); }
+  } catch (error) { app.process().kill('SIGKILL'); throw error;
+  } finally {
+    // Intentionally close immediately after bridge availability, without waiting
+    // for a React-ready locator: preload must queue this early flush request.
+    if (!app.process().killed) await app.close();
+    rmSync(root, { recursive: true, force: true });
+  }
 });

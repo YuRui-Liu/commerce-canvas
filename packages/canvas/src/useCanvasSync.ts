@@ -29,7 +29,7 @@ export function useCanvasSync(bridge: DesktopBridge) {
     queue.current = coordinator;
     setRecord(next); setSavedMessages(next.panel.messages); setEpoch(value => value + 1); setStatus('画布已保存');
   }, [bridge]);
-  const loadProject = useCallback(async (projectId: string, canvasId?: string) => {
+  const prepareProject = useCallback(async (projectId: string, canvasId?: string) => {
     await flush();
     const ticket = ++loadEpoch.current;
     let items = await bridge.listCanvases({ projectId });
@@ -37,11 +37,18 @@ export function useCanvasSync(bridge: DesktopBridge) {
     const next = selected && items.some(c => c.id === selected)
       ? await bridge.loadCanvas({ projectId, canvasId: selected })
       : items.length ? await bridge.loadCanvas({ projectId, canvasId: items[0].id }) : await bridge.createCanvas({ projectId, name: '画布 1' });
-    if (ticket !== loadEpoch.current) return;
+    if (ticket !== loadEpoch.current) throw Error('LOAD_SUPERSEDED');
     if (!items.length) items = await bridge.listCanvases({ projectId });
-    await bridge.selectCanvas({ projectId, canvasId: next.document.id });
-    setList(items); install(next);
-  }, [bridge, flush, install]);
+    return { items, next };
+  }, [bridge, flush]);
+  const installProject = useCallback((prepared: { items: CanvasSummary[]; next: CanvasRecord }) => {
+    setList(prepared.items); install(prepared.next);
+  }, [install]);
+  const loadProject = useCallback(async (projectId: string, canvasId?: string) => {
+    const prepared = await prepareProject(projectId, canvasId);
+    await bridge.selectCanvas({ projectId, canvasId: prepared.next.document.id });
+    installProject(prepared);
+  }, [bridge, prepareProject, installProject]);
   const edit = useCallback((patch: { document?: CanvasDocument; panel?: PanelState }) => {
     const coordinator = queue.current;
     if (!coordinator) return;
@@ -77,5 +84,5 @@ export function useCanvasSync(bridge: DesktopBridge) {
     const created = await bridge.createCanvas({ projectId, name: `画布 ${list.length + 1}` });
     await loadProject(projectId, created.document.id);
   }, [bridge, flush, list.length, loadProject]);
-  return { record, list, epoch, status, savedMessages, failed: !!queue.current?.error, conflict: String(queue.current?.error).includes('REVISION_CONFLICT'), edit, editPanel, flush, retry, loadProject, reload, copy, create };
+  return { record, list, epoch, status, savedMessages, failed: !!queue.current?.error, conflict: String(queue.current?.error).includes('REVISION_CONFLICT'), edit, editPanel, flush, retry, prepareProject, installProject, loadProject, reload, copy, create };
 }
