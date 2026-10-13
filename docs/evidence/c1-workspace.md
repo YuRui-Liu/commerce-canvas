@@ -1,0 +1,44 @@
+# C1 双主题工作区验收
+
+日期：2026-10-13。范围：桌面工作区、两套主题、商品项目与资料编辑、设置；不包含画布图编排或 Agent 执行。
+
+## 实现
+
+- 顶栏 64px、导航 56px、素材栏 224px、助手栏 320px；小于 1280px 素材栏可覆盖/折叠，助手栏可折叠。
+- 白瓷钴蓝与纸白莓红使用统一 token，调用真实 getTheme/setTheme 持久化。主题不修改图片样式或资源数据。
+- 项目创建、选择、重命名；商品事实、SKU 编码/名称、品牌名称/描述写入真实桥与 SQLite。已有 SKU attributes、品牌 guidelines 在编辑基础字段时保留。
+- 切换项目前提交资料草稿，修订冲突时阻止覆盖并提供重新载入/另存资料副本。另存为 SKU 生成新 UUID，保留原项目；素材不隐式复制。
+- 素材导入、文本添加和查看使用真实本地接口。切项目先清空素材和查看器再切访问上下文。
+- 配置/对话草稿独立；对话仅为本次会话草稿，执行尚未接入。无模型凭证仍可整理本地资料。
+- 设置提供两种外观、DeepSeek/GRSai 凭证存储与删除、脱敏尾号；保存成功清空输入，不读取秘密。安全存储失败显示就近说明。
+- 原生 dialog 约束焦点，Esc 返回触发控件；标签支持方向键/Home/End；焦点 2px/3px offset，线性图标控件 44px，140ms 过渡及 reduced-motion。
+- SQLite/Sharp 健康信息移至设置诊断。独立 CanvasRegion 留给 C2 接入真实画布。
+
+## 实际验证
+
+- `npm test`：35/35 通过。
+- `npm run typecheck`：通过，已将 packages/**/*.tsx 纳入检查。
+- `git diff --check`：通过。
+- `npm run package:desktop`：macOS arm64 打包成功。
+- 使用打包的 CommerceCanvas.app 执行 `npm run test:e2e`：5/5 通过（9.0s）。
+- Electron 内确认 utility process SQLite/Sharp 正常，contextIsolation/sandbox 启用，nodeIntegration 关闭；打包应用忽略注入的开发 URL。
+- 工作区测试覆盖创建/切换/重命名、事实/SKU/品牌重启持久化、保存前验证、冲突重载及另存不覆盖新修订、标签键盘切换、草稿保留、弹窗焦点/Esc、侧栏折叠、主题重启恢复。
+- 同一导入图片在两主题前后的 asset version id 和 SHA-256 hash 相同。
+- 1440×960、1280×800、1024×768 三尺寸 A/B 实际 Electron 截图均已查看，断言无整页横向溢出。
+
+截图保存于忽略的 `apps/desktop/dist/`：
+
+- `workspace-白瓷钴蓝-{1440,1280,1024}.png`
+- `workspace-纸白莓红-{1440,1280,1024}.png`
+- `workspace-empty.png`、`workspace-chat.png`、`workspace-settings.png`
+
+## 测试驱动与自审
+
+先写工作区 Electron 验收，原工程壳缺少创建项目入口，新测试超时；期间用旧 smoke 确认 Electron 可运行。实现后修正一个重复文案定位器，主流程通过。追加冲突测试得到明确红灯：重载后项目下拉仍显示旧名称，已修复并绿灯。追加“已有 SKU 的冲突另存”测试得到明确红灯：主键冲突导致另存失败，已通过新 UUID 修复并在最终打包测试通过。
+
+## 验证边界
+
+- 未向真实系统钥匙串写入测试凭证；凭证安全存储有既有单测，UI 保存/删除和系统拒绝路径尚未进行真实钥匙串交互验收。
+- 没有 API 密钥，未测试真实 DeepSeek/GRSai 调用，也未声称生成成功。
+- 原生文件选择框未自动选择文件；图片导入使用真实 importImageBytes 桥验证存储，文本通过 UI 添加。批量导入逐文件错误详情留待 C3 扩展契约，当前失败时刷新并保留已成功的素材。
+- 未进行完整屏幕阅读器、200% 系统缩放和所有 WCAG 条款审计。

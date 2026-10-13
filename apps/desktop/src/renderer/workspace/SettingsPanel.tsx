@@ -1,0 +1,20 @@
+import { useEffect, useState } from 'react';
+import type { CredentialMetadata, CredentialService } from '../../../../../packages/contracts/src/bridge';
+import type { RuntimeHealth } from '../../../../../packages/runtime/src/index';
+import { Button } from '../../../../../packages/ui/src/Button';
+import { Dialog } from '../../../../../packages/ui/src/Dialog';
+import { useTheme } from '../../../../../packages/ui/src/theme/ThemeProvider';
+export function ThemeChoices() { const { theme, changeTheme } = useTheme(); return <div className="theme-choices" aria-label="外观"><Button aria-pressed={theme === 'studio'} onClick={() => changeTheme('studio')}>白瓷钴蓝</Button><Button aria-pressed={theme === 'editorial'} onClick={() => changeTheme('editorial')}>纸白莓红</Button></div>; }
+function CredentialField({ service, metadata, refresh }: { service: CredentialService; metadata?: CredentialMetadata; refresh: () => Promise<void> }) {
+  const [secret, setSecret] = useState(''); const [message, setMessage] = useState(''); const [busy, setBusy] = useState(false);
+  const name = service === 'grsai' ? 'GRSai' : 'DeepSeek';
+  async function write(remove = false) { setBusy(true); setMessage(''); try { if (remove && metadata) await window.commerceCanvas.removeCredential({ credentialId: metadata.credentialId }); else { await window.commerceCanvas.storeCredential({ service, secret }); setSecret(''); } await refresh(); setMessage(remove ? '凭证已删除。' : '凭证已安全保存，尚未验证连接。'); } catch (e) { setMessage(String(e).includes('SECURE_STORAGE_UNAVAILABLE') ? '系统安全存储不可用，凭证未保存。请启用系统钥匙串后重试。' : '凭证操作失败，请检查系统钥匙串后重试。'); } finally { setBusy(false); } }
+  return <section className="credential"><div className="section-title"><h3>{name}</h3><small>{metadata ? `已存储 ${metadata.maskedTail}` : '未配置'}</small></div><p className="muted">{service === 'grsai' ? '直接连接 GRSai 图片服务。' : '用于理解商品资料与创作需求。'}执行功能尚未接入。</p><label>{name} API Key<input type="password" autoComplete="off" maxLength={8192} value={secret} onChange={e => setSecret(e.target.value)} placeholder="输入凭证，保存后不再回显"/></label><div className="inline-actions"><Button onClick={() => void write()} disabled={busy || !secret.trim()}>保存 {name} 凭证</Button>{metadata && <Button onClick={() => void write(true)} disabled={busy}>删除 {name} 凭证</Button>}</div>{message && <p role="alert">{message}</p>}</section>;
+}
+export function SettingsPanel({ onClose }: { onClose: () => void }) {
+  const [credentials, setCredentials] = useState<CredentialMetadata[]>([]); const [health, setHealth] = useState<RuntimeHealth>(); const [error, setError] = useState('');
+  const refresh = async () => setCredentials(await window.commerceCanvas.listCredentialMetadata());
+  useEffect(() => { void refresh().catch(() => setError('凭证信息读取失败，请关闭后重试。')); }, []);
+  async function diagnose() { try { setHealth(await window.commerceCanvas.health()); setError(''); } catch { setError('本地引擎连接失败，请重新启动应用。'); } }
+  return <Dialog title="设置" onClose={onClose}><section><h3>工作区外观</h3><ThemeChoices/><p className="muted">仅改变界面外观，商品图片保持原样。</p></section><h3>模型与图片服务</h3>{(['deepseek', 'grsai'] as const).map(service => <CredentialField key={service} service={service} metadata={credentials.find(c => c.service === service)} refresh={refresh}/>)}<section className="settings-section"><h3>Codex / WorkBuddy</h3><p className="muted">本地助手连接尚未接入，将在后续版本提供配置。</p></section><details onToggle={e => { if (e.currentTarget.open && !health) void diagnose(); }}><summary>诊断</summary>{error && <p className="error">{error}</p>}{health ? <div className="diagnostics"><strong>{health.sqlite.ok && health.sharp.ok ? '本地引擎已就绪' : '本地引擎需要检查'}</strong><dl><dt>SQLite</dt><dd>{health.sqlite.ok ? '读写验证通过' : health.sqlite.error}</dd><dt>Sharp</dt><dd>{health.sharp.ok ? '图像处理验证通过' : health.sharp.error}</dd></dl><small>Electron {health.electron} · Node {health.node} · {health.processType}</small></div> : <p className="muted">正在检查本地引擎…</p>}<Button onClick={() => void diagnose()}>重新检查</Button></details>{error && <p role="alert" className="error">{error}</p>}</Dialog>;
+}

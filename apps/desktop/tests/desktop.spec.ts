@@ -12,6 +12,8 @@ test('secure desktop displays capabilities verified inside Electron utility proc
   const app = await electron.launch({ ...(packagedExecutable ? { executablePath: packagedExecutable, args: [] } : { args: [resolve('apps/desktop/dist/main/index.js')] }), env: { ...process.env, COMMERCECANVAS_TEST_USER_DATA: userData } });
   try {
     const page = await app.firstWindow();
+    await page.getByRole('button', { name: '设置', exact: true }).click();
+    await page.getByText('诊断', { exact: true }).click();
     await expect(page.getByText('本地引擎已就绪')).toBeVisible();
     const result = await page.evaluate(() => window.commerceCanvas.health());
     expect(result.sqlite).toMatchObject({ ok: true, value: 'commercecanvas' });
@@ -23,6 +25,7 @@ test('secure desktop displays capabilities verified inside Electron utility proc
     expect(preferences).toMatchObject({ contextIsolation: true, sandbox: true, nodeIntegration: false });
     console.log('UTILITY_HEALTH', JSON.stringify(result));
     await page.screenshot({ path: 'apps/desktop/dist/foundation-desktop.png' });
+    await page.keyboard.press('Escape');
     await page.getByRole('button', { name: '纸白莓红' }).click();
     await expect(page.getByRole('button', { name: '纸白莓红' })).toHaveAttribute('aria-pressed', 'true');
     await page.screenshot({ path: 'apps/desktop/dist/foundation-desktop-editorial.png' });
@@ -36,6 +39,8 @@ test('packaged app ignores an injected development renderer URL', async () => {
   try {
     const page = await app.firstWindow();
     await expect(page).toHaveURL(/^file:.*\/renderer\/index\.html$/);
+    await page.getByRole('button', { name: '设置', exact: true }).click();
+    await page.getByText('诊断', { exact: true }).click();
     await expect(page.getByText('本地引擎已就绪')).toBeVisible();
     expect(await app.evaluate(({ app }) => app.isPackaged)).toBe(true);
   } finally { await app.close(); }

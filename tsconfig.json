@@ -5,5 +5,5 @@
     "esModuleInterop": true, "skipLibCheck": true, "resolveJsonModule": true,
     "types": ["node", "electron-vite/node"]
   },
-  "include": ["apps/**/*.ts", "apps/**/*.tsx", "packages/**/*.ts", "vitest.config.ts"]
+  "include": ["apps/**/*.ts", "apps/**/*.tsx", "packages/**/*.ts", "packages/**/*.tsx", "vitest.config.ts"]
 }

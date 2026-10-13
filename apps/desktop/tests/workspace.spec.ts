@@ -1,0 +1,137 @@
+import { _electron as electron, expect, test } from '@playwright/test';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import sharp from 'sharp';
+test('workspace persists drafts, protects revisions and restores both themes', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'commercecanvas-e2e-workspace-'));
+  const launch = () => electron.launch({ ...(process.env.COMMERCECANVAS_EXECUTABLE ? { executablePath: process.env.COMMERCECANVAS_EXECUTABLE, args: [] } : { args: [resolve('apps/desktop/dist/main/index.js')] }), env: { ...process.env, COMMERCECANVAS_TEST_USER_DATA: root } });
+  let app = await launch();
+  try {
+    let page = await app.firstWindow();
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await page.screenshot({ path: 'apps/desktop/dist/workspace-empty.png', animations: 'disabled' });
+    await page.getByRole('button', { name: '创建项目', exact: true }).first().click();
+    await page.getByLabel('项目名称').fill('燕麦洗护');
+    await page.getByRole('button', { name: '创建', exact: true }).click();
+    await page.getByLabel('商品名称').fill('燕麦洗发水');
+    await page.getByLabel('品牌名称').fill('谷物实验室');
+    await page.getByRole('button', { name: '添加 SKU' }).click();
+    await page.getByLabel('SKU 编码').fill('OAT-01');
+    await page.getByLabel('SKU 名称').fill('500ml');
+    await page.getByRole('tab', { name: '对话', exact: true }).click();
+    await page.getByLabel('创作需求').fill('保留标签，换浅灰背景');
+    await page.getByRole('tab', { name: '配置', exact: true }).click();
+    await expect(page.getByLabel('商品名称')).toHaveValue('燕麦洗发水');
+    await page.getByRole('button', { name: '保存资料' }).click();
+    await expect(page.getByRole('status')).toContainText('已保存');
+    await page.evaluate(async () => { const id = await window.commerceCanvas.getCurrentProject(); const d = await window.commerceCanvas.getProject({ projectId: id! }); await window.commerceCanvas.updateProject({ projectId: id!, expectedRevision: d!.project.revision, update: { facts: { '商品名称': '外部更新' } } }); });
+    await page.getByLabel('商品名称').fill('本地草稿');
+    await page.getByRole('button', { name: '保存资料' }).click();
+    await expect(page.getByRole('alert')).toContainText('内容已在另一处更新');
+    await page.getByRole('button', { name: '重新载入' }).click();
+    await expect(page.getByLabel('商品名称')).toHaveValue('外部更新');
+    await expect(page.getByLabel('品牌名称')).toHaveValue('谷物实验室');
+    const originalId = await page.evaluate(() => window.commerceCanvas.getCurrentProject());
+    await page.getByLabel('商品名称').fill('切换前草稿');
+    await page.getByRole('button', { name: '创建项目', exact: true }).first().click();
+    await page.getByLabel('项目名称').fill('第二商品');
+    await page.getByRole('button', { name: '创建', exact: true }).click();
+    await expect(page.getByLabel('商品名称')).toHaveValue('');
+    await page.getByLabel('商品项目', { exact: true }).selectOption(originalId!);
+    await expect(page.getByLabel('商品名称')).toHaveValue('切换前草稿');
+    await page.getByRole('button', { name: '重命名', exact: true }).click();
+    await page.getByLabel('项目名称').fill('燕麦洗护 · 新名称');
+    await page.getByRole('button', { name: '保存名称' }).click();
+    await expect(page.getByLabel('商品项目', { exact: true }).locator('option:checked')).toHaveText('燕麦洗护 · 新名称');
+    await page.getByRole('tab', { name: '配置', exact: true }).focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(page.getByRole('tab', { name: '对话', exact: true })).toBeFocused();
+    await expect(page.getByLabel('创作需求')).toHaveValue('保留标签，换浅灰背景');
+    await page.screenshot({ path: 'apps/desktop/dist/workspace-chat.png', animations: 'disabled' });
+    await page.keyboard.press('ArrowLeft');
+    await page.getByRole('button', { name: '添加文本', exact: true }).first().click();
+    await page.getByLabel('文本内容').fill('产品标签必须保持完整');
+    await page.getByRole('button', { name: '添加到素材库' }).click();
+    const pixels = [...await sharp({ create: { width: 20, height: 30, channels: 4, background: '#b44422' } }).png().toBuffer()];
+    const before = await page.evaluate(async bytes => { const projectId = await window.commerceCanvas.getCurrentProject(); return window.commerceCanvas.importImageBytes({ projectId: projectId!, bytes: new Uint8Array(bytes), name: '商品.png' }); }, pixels);
+    // Project switch refreshes the asset library through the production bridge.
+    const second = await page.evaluate(async id => (await window.commerceCanvas.listProjects()).find(p => p.id !== id)!.id, originalId);
+    await page.getByLabel('商品项目', { exact: true }).selectOption(second);
+    await expect(page.locator('.asset-card')).toHaveCount(0);
+    await page.getByLabel('商品项目', { exact: true }).selectOption(originalId!);
+    await expect(page.locator('.asset-card')).toHaveCount(2);
+    await page.getByRole('button', { name: '设置', exact: true }).click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await page.screenshot({ path: 'apps/desktop/dist/workspace-settings.png', animations: 'disabled' });
+    await page.getByRole('button', { name: '关闭弹窗' }).focus();
+    await page.keyboard.press('Shift+Tab');
+    expect(await page.evaluate(() => !!document.activeElement?.closest('dialog'))).toBe(true);
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('button', { name: '设置', exact: true })).toBeFocused();
+    for (const theme of ['白瓷钴蓝', '纸白莓红']) {
+      await page.getByRole('button', { name: theme, exact: true }).click();
+      await expect(page.getByRole('button', { name: theme, exact: true })).toHaveAttribute('aria-pressed', 'true');
+      for (const [width, height] of [[1440,960], [1280,800], [1024,768]]) {
+        await page.setViewportSize({ width, height });
+        if (width === 1024) await page.getByRole('button', { name: '素材库', exact: true }).click();
+        if (width === 1440 && await page.getByRole('button', { name: '素材库', exact: true }).getAttribute('aria-pressed') === 'false') await page.getByRole('button', { name: '素材库', exact: true }).click();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        await page.locator('#config-panel').evaluate(element => { element.scrollTop = 0; });
+        await page.screenshot({ path: `apps/desktop/dist/workspace-${theme}-${width}.png`, animations: 'disabled' });
+      }
+    }
+    const after = await page.evaluate(async id => (await window.commerceCanvas.listAssets({ projectId: id! })).find(a => a.kind === 'image'), originalId);
+    expect(after).toMatchObject({ id: before.id, hash: before.hash });
+    await page.getByRole('button', { name: '收起助手', exact: true }).click();
+    await expect(page.getByRole('complementary', { name: '创作助手' })).toHaveCount(0);
+    await page.getByRole('button', { name: '展开助手', exact: true }).click();
+    await expect(page.getByLabel('商品名称')).toHaveValue('切换前草稿');
+    await app.close(); app = await launch(); page = await app.firstWindow();
+    await expect(page.getByRole('button', { name: '纸白莓红', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await page.getByLabel('商品项目', { exact: true }).selectOption(originalId!);
+    await expect(page.getByLabel('品牌名称')).toHaveValue('谷物实验室');
+    await expect(page.getByLabel('SKU 编码')).toHaveValue('OAT-01');
+  } finally { await app.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test('workspace keeps the newer revision when saving a conflicting draft as a copy', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'commercecanvas-e2e-conflict-'));
+  const app = await electron.launch({ ...(process.env.COMMERCECANVAS_EXECUTABLE ? { executablePath: process.env.COMMERCECANVAS_EXECUTABLE, args: [] } : { args: [resolve('apps/desktop/dist/main/index.js')] }), env: { ...process.env, COMMERCECANVAS_TEST_USER_DATA: root } });
+  try {
+    const page = await app.firstWindow();
+    await page.getByRole('button', { name: '创建项目', exact: true }).first().click();
+    await page.getByLabel('项目名称').fill('冲突项目');
+    await page.getByRole('button', { name: '创建', exact: true }).click();
+    const original = await page.evaluate(() => window.commerceCanvas.getCurrentProject());
+    await page.getByLabel('商品名称').fill('未保存的商品');
+    await page.getByRole('button', { name: '添加 SKU' }).click();
+    await page.getByRole('button', { name: '保存资料' }).click();
+    await expect(page.getByRole('status')).toContainText('保存失败');
+    await expect(page.getByLabel('商品名称')).toHaveValue('未保存的商品');
+    await page.getByLabel('SKU 编码').fill('SKU-1');
+    await page.getByLabel('SKU 名称').fill('大号');
+    await page.getByRole('button', { name: '保存资料' }).click();
+    await expect(page.getByRole('status')).toContainText('已保存');
+    await page.getByLabel('商品名称').fill('未保存的商品更新');
+    const newer = await page.evaluate(async id => window.commerceCanvas.renameProject({ projectId: id!, expectedRevision: 2, name: '其他窗口的新名称' }), original);
+    await page.getByRole('button', { name: '保存资料' }).click();
+    await expect(page.getByRole('alert')).toContainText('内容已在另一处更新');
+    await page.getByRole('button', { name: '另存资料副本' }).click();
+    await expect(page.getByRole('status')).toContainText('资料已另存');
+    const saved = await page.evaluate(async id => ({ original: await window.commerceCanvas.getProject({ projectId: id! }), copy: await window.commerceCanvas.getProject({ projectId: (await window.commerceCanvas.getCurrentProject())! }) }), original);
+    expect(saved.original?.project).toEqual(newer);
+    expect(saved.copy?.project.id).not.toBe(original);
+    expect(saved.copy?.project.facts['商品名称']).toBe('未保存的商品更新');
+    expect(saved.copy?.skus[0].id).not.toBe(saved.original?.skus[0].id);
+    expect(saved.copy?.skus[0]).toMatchObject({ code: 'SKU-1', name: '大号' });
+    await page.getByRole('button', { name: '重命名', exact: true }).click();
+    await page.getByLabel('项目名称').fill('不能覆盖的新名字');
+    await page.evaluate(async () => { const id = (await window.commerceCanvas.getCurrentProject())!; const current = await window.commerceCanvas.getProject({ projectId: id }); await window.commerceCanvas.renameProject({ projectId: id, expectedRevision: current!.project.revision, name: '更晚的名字' }); });
+    await page.getByRole('button', { name: '保存名称' }).click();
+    await expect(page.getByRole('dialog').getByRole('alert')).toContainText('另一处更新');
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: '重新载入' }).click();
+    await expect(page.getByLabel('商品项目', { exact: true }).locator('option:checked')).toHaveText('更晚的名字');
+  } finally { await app.close(); rmSync(root, { recursive: true, force: true }); }
+});

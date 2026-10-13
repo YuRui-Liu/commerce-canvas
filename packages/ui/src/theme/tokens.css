@@ -1,0 +1,36 @@
+:root, [data-theme='studio'] {
+  --panel: #fff; --canvas: #f0f2f5; --ink: #20242d; --muted: #626978;
+  --accent: #3659df; --line: #e2e5eb; --radius: 12px; --accent-soft: #edf1ff;
+  --danger: #ac263c; --space: 16px; --motion: 140ms;
+}
+[data-theme='editorial'] {
+  --panel: #fffefd; --canvas: #eeecea; --ink: #272326; --muted: #72696b;
+  --accent: #a9344e; --line: #e5dfe0; --radius: 8px; --accent-soft: #faedf0;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font: 14px/1.7 -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif; color: var(--ink); background: var(--panel); }
+button, input, textarea, select { font: inherit; color: inherit; }
+button, input, textarea, select { border-radius: 7px; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; opacity: .55; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+button { transition: background var(--motion), color var(--motion); }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
+.button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 38px; padding: 6px 14px; border: 1px solid var(--line); background: var(--panel); font-weight: 500; white-space: nowrap; }
+.button:hover:not(:disabled) { background: var(--canvas); }
+.button.primary { color: white; background: var(--accent); border-color: var(--accent); }
+.button.primary:hover:not(:disabled) { filter: brightness(.94); }
+.button.icon { width: 44px; min-width: 44px; height: 44px; padding: 10px; }
+.button.quiet { border-color: transparent; background: transparent; }
+.button[aria-pressed='true'] { color: var(--accent); background: var(--accent-soft); border-color: transparent; }
+.ui-dialog { width: min(600px, calc(100vw - 48px)); max-height: calc(100vh - 64px); padding: 24px; border: 1px solid var(--line); border-radius: var(--radius); color: var(--ink); background: var(--panel); box-shadow: 0 20px 80px #20242d26; }
+.ui-dialog::backdrop { background: #20242d55; }
+.dialog-heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.dialog-heading h2 { margin: 0; font-size: 18px; }
+.dialog-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 24px; }
+label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 500; }
+input, textarea, select { width: 100%; border: 1px solid var(--line); background: var(--panel); padding: 8px 10px; min-height: 38px; font-size: 14px; }
+textarea { resize: vertical; min-height: 84px; line-height: 1.7; }
+small { font-size: 12px; color: var(--muted); }
+.muted { color: var(--muted); }
+.error { color: var(--danger); }
