@@ -23,13 +23,13 @@ const Card=memo(function Card({data}:NodeProps<Node<NodeData>>){
   </article>;
 });
 const nodeTypes={asset:Card,text:Card,agent:Card,output:Card,group:Card};
-export type CanvasHandle={addAssets:(assets:AssetVersion[],position?:{x:number;y:number})=>void;getDocument:()=>CanvasDocument;replaceVersion:(nodeId:string,versionId:string)=>void;setEdgeRole:(edgeId:string,role:InputRole)=>void};
+export type CanvasHandle={addAssets:(assets:AssetVersion[],position?:{x:number;y:number})=>void;getDocument:()=>CanvasDocument;replaceVersion:(nodeId:string,versionId:string)=>void;setEdgeRole:(edgeId:string,role:InputRole)=>void;clearSelection:()=>void;flushPending:()=>Promise<void>;cancelPending:()=>void};
 // document is the initial document for this mount. Use a load epoch/key for explicit
 // replacement; revisions emitted by onChange must not remount/reset gesture history.
-export type CanvasProps={document:CanvasDocument;assets:AssetVersion[];onChange:(doc:CanvasDocument)=>void;onView:(asset:AssetVersion)=>void;onSelectionChange?:(ids:string[])=>void;onAssetInput?:(input:AssetInput,position:{x:number;y:number})=>void};
-export const Canvas=forwardRef<CanvasHandle,CanvasProps>(function Canvas({document,assets,onChange,onView,onSelectionChange,onAssetInput},ref){
+export type CanvasProps={document:CanvasDocument;initialSelection?:string[];disabled?:boolean;assets:AssetVersion[];onChange:(doc:CanvasDocument)=>void;onView:(asset:AssetVersion)=>void;onSelectionChange?:(ids:string[])=>void;onAssetInput?:(input:AssetInput,position:{x:number;y:number})=>void};
+export const Canvas=forwardRef<CanvasHandle,CanvasProps>(function Canvas({document,initialSelection=[],disabled=false,assets,onChange,onView,onSelectionChange,onAssetInput},ref){
   const [history,setHistory]=useState(()=>createHistory(document));const current=useRef(document);const hist=useRef(history);hist.current=history;
-  const [selection,setSelection]=useState<string[]>([]);const [message,setMessage]=useState('');const [snap,setSnap]=useState(true);
+  const [selection,setSelection]=useState<string[]>(initialSelection);const [message,setMessage]=useState('');const [snap,setSnap]=useState(true);
   const [edgeSelection,setEdgeSelection]=useState<string[]>([]);
   const flow=useRef<ReactFlowInstance<Node<NodeData>>|null>(null);const dragStart=useRef<CanvasDocument|null>(null);
   const batches=useRef<AssetBatch[]>([]);
@@ -37,6 +37,8 @@ export const Canvas=forwardRef<CanvasHandle,CanvasProps>(function Canvas({docume
   const mounted=useRef(true);
   const addingRef=useRef(false);
   const [adding,setAdding]=useState(false);
+  const disabledRef=useRef(disabled);disabledRef.current=disabled;
+  const locked=adding||disabled;
   const changeCallback=useRef(onChange);changeCallback.current=onChange;
   useEffect(()=>{
     mounted.current=true;
@@ -52,7 +54,7 @@ export const Canvas=forwardRef<CanvasHandle,CanvasProps>(function Canvas({docume
   // Parent keys the component by document ID; viewport is never reset for resize/theme.
   const update=useCallback((next:CanvasDocument,record=true)=>{
     if(addingRef.current||!mounted.current)return;
-    current.current=next;setHistory(h=>record?commit(h,next):{...h,present:next});onChange(next);
+    current.current=next;setHistory(h=>record?commit(h,next):{...h,present:next});if(!dragStart.current)onChange(next);
   },[onChange]);
   const advanceBatch=useCallback(function advance(){
     if(!mounted.current)return;
@@ -87,23 +89,44 @@ export const Canvas=forwardRef<CanvasHandle,CanvasProps>(function Canvas({docume
     if(dragStart.current){const before=dragStart.current,after=current.current;setHistory(h=>commit({...h,present:before},after));dragStart.current=null;}
     addingRef.current=true;setAdding(true);advanceBatch();
   },[advanceBatch]);
-  useImperativeHandle(ref,()=>({addAssets,getDocument:()=>batches.current[0]?.before??current.current,replaceVersion:(id,versionId)=>update(replaceNodeVersion(current.current,id,versionId)),setEdgeRole:(id,role)=>update(changeEdgeRole(current.current,id,role))}),[addAssets,update]);
+  useImperativeHandle(ref,()=>({
+    addAssets,getDocument:()=>batches.current[0]?.before??current.current,
+    replaceVersion:(id,versionId)=>update(replaceNodeVersion(current.current,id,versionId)),
+    setEdgeRole:(id,role)=>update(changeEdgeRole(current.current,id,role)),
+    clearSelection:()=>{setSelection([]);setEdgeSelection([]);onSelectionChange?.([]);},
+    cancelPending:()=>{
+      if(batchFrame.current!==null)cancelAnimationFrame(batchFrame.current);
+      const before=batches.current[0]?.before;
+      if(before){current.current=before;setHistory(h=>({...h,present:before}));}
+      batches.current=[];batchFrame.current=null;addingRef.current=false;setAdding(false);
+      if(dragStart.current){dragStart.current=null;changeCallback.current(current.current);}
+    },
+    flushPending:async()=>{
+      const start=Date.now();
+      while(addingRef.current){
+        if(!mounted.current||Date.now()-start>10000)throw Error('CANVAS_BATCH_TIMEOUT');
+        await new Promise<void>(resolve=>requestAnimationFrame(()=>resolve()));
+      }
+      // A close during a gesture must commit the current position as well.
+      if(dragStart.current){dragStart.current=null;changeCallback.current(current.current);}
+    },
+  }),[addAssets,update,onSelectionChange]);
   const data=history.present;
   const assetMap=useMemo(()=>new Map(assets.map(a=>[a.id,a])),[assets]);
   const nodes=useMemo(()=>data.nodes.map(n=>({id:n.id,type:n.kind,position:n.position,parentId:n.parentId,selected:selection.includes(n.id),style:n.kind==='group'?{width:n.width,height:n.height}:undefined,data:{node:n,asset:n.assetVersionId?assetMap.get(n.assetVersionId):undefined,view:onView}})),[data.nodes,selection,assetMap,onView]);
   const edges=useMemo(()=>data.edges.map(e=>({...e,selected:edgeSelection.includes(e.id),targetHandle:e.role,sourceHandle:'output',label:roleNames[e.role]})),[data.edges,edgeSelection]);
   const selectionChanged=useCallback(({nodes:chosen}:{nodes:Node[]})=>{onSelectionChange?.(chosen.map(n=>n.id));},[onSelectionChange]);
-  const connect=useCallback((c:Connection)=>{if(addingRef.current)return;const role=InputRoleSchema.safeParse(c.targetHandle);if(!role.success||!canConnect(current.current,c.source,c.target,role.data)){setMessage('无法连接：检查循环、输入角色是否已占用。');return;}update({...current.current,edges:[...current.current.edges,{id:crypto.randomUUID(),source:c.source,target:c.target,role:role.data}]});setMessage('已连接');},[update]);
+  const connect=useCallback((c:Connection)=>{if(addingRef.current||disabledRef.current)return;const role=InputRoleSchema.safeParse(c.targetHandle);if(!role.success||!canConnect(current.current,c.source,c.target,role.data)){setMessage('无法连接：检查循环、输入角色是否已占用。');return;}update({...current.current,edges:[...current.current.edges,{id:crypto.randomUUID(),source:c.source,target:c.target,role:role.data}]});setMessage('已连接');},[update]);
   const historyAction=(action:typeof undo)=>{if(addingRef.current)return;const result=action(hist.current);const next={...result,present:{...result.present,viewport:current.current.viewport}};setHistory(next);current.current=next.present;onChange(next.present);};
   const remove=()=>{const deleted=new Set(selection);let changed=true;while(changed){changed=false;for(const n of current.current.nodes)if(n.parentId&&deleted.has(n.parentId)&&!deleted.has(n.id)){deleted.add(n.id);changed=true;}}
     update({...current.current,nodes:current.current.nodes.filter(n=>!deleted.has(n.id)),edges:current.current.edges.filter(e=>!deleted.has(e.source)&&!deleted.has(e.target)&&!edgeSelection.includes(e.id))});setSelection([]);setEdgeSelection([]);};
-  return <div className="graph-workspace" tabIndex={0} aria-label="无限画布" aria-busy={adding}
+  return <div className="graph-workspace" tabIndex={0} aria-label="无限画布" aria-busy={locked} inert={disabled}
     onDragOver={event=>{if(!isEditing(event.target)){event.preventDefault();event.dataTransfer.dropEffect='copy';}}}
     onDrop={event=>{const input=droppedInput(event);if(!input)return;event.preventDefault();const position=flow.current?.screenToFlowPosition({x:event.clientX,y:event.clientY},{snapToGrid:false});if(position)onAssetInput?.(input,position);}}
     onPaste={event=>{const input=pastedInput(event);if(!input)return;event.preventDefault();const bounds=event.currentTarget.getBoundingClientRect();const position=flow.current?.screenToFlowPosition({x:bounds.x+bounds.width/2,y:bounds.y+bounds.height/2},{snapToGrid:false});if(position)onAssetInput?.(input,position);}}
     onKeyDown={event=>{
     if(event.nativeEvent.isComposing||isEditing(event.target))return;
-    if(addingRef.current){if(event.key==='Delete'||event.key==='Backspace'||((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='z'))event.preventDefault();return;}
+    if(addingRef.current||disabledRef.current){if(event.key==='Delete'||event.key==='Backspace'||((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='z'))event.preventDefault();return;}
     if(event.key==='Delete'||event.key==='Backspace'){event.preventDefault();remove();}
     if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='z'){event.preventDefault();historyAction(event.shiftKey?redo:undo);}
     if(event.key==='Escape'){setSelection([]);setEdgeSelection([]);onSelectionChange?.([]);}
@@ -121,11 +144,12 @@ export const Canvas=forwardRef<CanvasHandle,CanvasProps>(function Canvas({docume
     </div>
     <ReactFlow<Node<NodeData>> nodes={nodes} edges={edges} nodeTypes={nodeTypes} onInit={instance=>{flow.current=instance;}} defaultViewport={document.viewport}
       minZoom={.1} maxZoom={4} selectionOnDrag multiSelectionKeyCode="Shift" panOnDrag={[1,2]} panActivationKeyCode="Space" panOnScroll zoomOnPinch snapToGrid={snap} snapGrid={[16,16]} deleteKeyCode={null} onlyRenderVisibleElements
-      nodesDraggable={!adding} nodesConnectable={!adding} elementsSelectable={!adding}
-      onMoveEnd={(_,viewport)=>{const next={...current.current,viewport};current.current=next;setHistory(h=>({...h,present:next}));if(!addingRef.current)onChange(next);}}
+      nodesDraggable={!locked} nodesConnectable={!locked} elementsSelectable={!locked} zoomOnScroll={!locked}
+      onMoveEnd={(_,viewport)=>{if(disabledRef.current)return;const next={...current.current,viewport};current.current=next;setHistory(h=>({...h,present:next}));if(!addingRef.current)onChange(next);}}
       onSelectionChange={selectionChanged}
       onEdgesChange={changes=>{const selected=changes.filter(change=>change.type==='select');if(selected.length)setEdgeSelection(previous=>{const ids=new Set(previous);for(const change of selected){if(change.selected)ids.add(change.id);else ids.delete(change.id);}return [...ids];});}}
       onNodesChange={changes=>{
+        if(disabledRef.current)return;
         const selected=changes.filter(c=>c.type==='select');
         if(selected.length)setSelection(previous=>{const ids=new Set(previous);for(const change of selected){if(change.selected)ids.add(change.id);else ids.delete(change.id);}return [...ids];});
         const positions=changes.filter(c=>c.type==='position');if(!positions.length||addingRef.current)return;
@@ -134,7 +158,7 @@ export const Canvas=forwardRef<CanvasHandle,CanvasProps>(function Canvas({docume
         update({...current.current,nodes:current.current.nodes.map(node=>byId.has(node.id)?{...node,position:byId.get(node.id)!}:node)},record);
       }}
       onNodeDragStart={()=>{if(!addingRef.current)dragStart.current=current.current;}}
-      onNodeDragStop={()=>{if(dragStart.current){const before=dragStart.current,after=current.current;setHistory(h=>commit({...h,present:before},after));dragStart.current=null;}}}
+      onNodeDragStop={()=>{if(dragStart.current){const before=dragStart.current,after=current.current;setHistory(h=>commit({...h,present:before},after));dragStart.current=null;onChange(after);}}}
       onConnect={connect} isValidConnection={c=>{const role=InputRoleSchema.safeParse(c.targetHandle);return !addingRef.current&&role.success&&canConnect(current.current,c.source,c.target,role.data);}}
       onEdgesDelete={removed=>update({...current.current,edges:current.current.edges.filter(e=>!removed.some(r=>r.id===e.id))})}>
       <Background gap={24}/><Controls showInteractive={false}/>

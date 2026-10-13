@@ -11,6 +11,7 @@ test('C3 clipboard text creates a real immutable asset and inspector preserves n
  for(const tag of ['input','textarea','div']){await page.locator('.graph-workspace').evaluate((el,tag)=>{const editor=document.createElement(tag);if(tag==='div')editor.contentEditable='true';el.append(editor);const dt=new DataTransfer();dt.setData('text/plain','输入内粘贴');editor.dispatchEvent(new ClipboardEvent('paste',{clipboardData:dt,bubbles:true,cancelable:true}));editor.remove();},tag);await expect(page.locator('.react-flow__node')).toHaveCount(0);}
  await page.locator('.graph-workspace').evaluate(el=>{const data=new DataTransfer();data.setData('text/plain','商品依据：棉');el.dispatchEvent(new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true}));});
  await expect(page.locator('.react-flow__node-text')).toHaveCount(1);
+ console.log('C3 dialog before inspector:',await page.getByRole('dialog').allTextContents());
  await page.locator('.react-flow__node-text header').click();
  await page.getByLabel('节点文本草稿').fill('商品依据：纯棉');await page.getByRole('button',{name:'保存文本新版本'}).click();
  await expect(page.locator('.graph-text')).toContainText('商品依据：纯棉');
@@ -45,6 +46,8 @@ test('C3 native import picker reports each bad file and keeps the good file',asy
  await app.evaluate(({dialog},paths)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:paths});},[invalid,valid]);
  await page.getByRole('button',{name:'上传图片',exact:true}).first().click();await expect(page.getByLabel('逐文件导入结果')).toContainText('broken.png：失败');await expect(page.getByLabel('逐文件导入结果')).toContainText('good.png：成功');
  const imported=await page.evaluate(async()=>window.commerceCanvas.listAssets({projectId:(await window.commerceCanvas.getCurrentProject())!}));expect(imported).toHaveLength(1);expect(imported[0].width).toBe(40);
+ await page.getByRole('button',{name:'创建项目',exact:true}).first().click();await page.getByLabel('项目名称').fill('不显示其他项目导入反馈');await page.getByRole('button',{name:'创建',exact:true}).click();
+ await expect(page.getByLabel('商品项目',{exact:true}).locator('option:checked')).toHaveText('不显示其他项目导入反馈');await expect(page.getByLabel('逐文件导入结果')).toHaveCount(0);
  }finally{await app.close();rmSync(root,{recursive:true,force:true});}
 });
 test('C3 dropped files preserve partial successes at transformed coordinates and viewers share pixel geometry',async()=>{

@@ -3,9 +3,10 @@ import { DatabaseSync } from 'node:sqlite';
 import foundationSql from './migrations/001-foundation.sql?raw';
 import assetsSql from './migrations/002-assets.sql?raw';
 import settingsSql from './migrations/003-settings.sql?raw';
+import canvasesSql from './migrations/004-canvases.sql?raw';
 
 // Vite/Vitest inline the SQL so packaged apps do not need the source tree.
-const migrations = [{ version: 1, sql: foundationSql }, { version: 2, sql: assetsSql }, { version: 3, sql: settingsSql }];
+const migrations = [{ version: 1, sql: foundationSql }, { version: 2, sql: assetsSql }, { version: 3, sql: settingsSql }, { version: 4, sql: canvasesSql }];
 
 export function openDatabase(file: string): DatabaseSync {
   const db = new DatabaseSync(file);

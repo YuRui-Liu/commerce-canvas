@@ -33,3 +33,20 @@ export const CanvasDocumentSchema = z.object({
 export type CanvasNode=z.infer<typeof CanvasNodeSchema>;
 export type CanvasEdge=z.infer<typeof CanvasEdgeSchema>;
 export type CanvasDocument=z.infer<typeof CanvasDocumentSchema>;
+
+// Only creative context belongs here. Credentials and product forms have separate stores.
+export const PanelStateSchema = z.object({
+  chatDraft: z.string().max(100000),
+  inspectorDrafts: z.record(Key, z.string().max(1000000)),
+  activeTab: z.enum(['config', 'chat']),
+  selectedIds: z.array(Key).max(10000),
+  messages: z.array(z.object({
+    id: IdSchema, role: z.literal('user'), text: z.string().min(1).max(100000),
+    selectedNodes: z.array(CanvasNodeSchema).max(10000),
+    createdAt: z.string().datetime(),
+  }).strict()).max(1000),
+}).strict();
+export type PanelState = z.infer<typeof PanelStateSchema>;
+export const emptyPanel = (): PanelState => ({ chatDraft: '', inspectorDrafts: {}, activeTab: 'config', selectedIds: [], messages: [] });
+export type CanvasRecord = { name: string; document: CanvasDocument; panel: PanelState };
+export type CanvasSummary = { id: string; name: string; revision: number };

@@ -1,6 +1,8 @@
 import { useRef, useState, type KeyboardEvent } from 'react';
 import type { BrandProfileInput, ProductUpdate, SkuInput } from '../../../../../packages/contracts/src/domain';
 import { Button } from '../../../../../packages/ui/src/Button';
+import type { PanelState } from '../../../../../packages/contracts/src/canvas';
+import { ConversationPanel } from './ConversationPanel';
 export type Draft = {
   facts: Record<string, string>;
   skus: SkuInput[];
@@ -8,16 +10,19 @@ export type Draft = {
 };
 const builtInFacts = ['商品名称', '核心卖点'];
 const factLimit = 100;
-export function RightPanel({ draft, change, disabled, save, conversation, setConversation, settings }: {
+export function RightPanel({ draft, change, disabled, save, panel, savedMessages, changePanel, saveRequirement, settings }: {
   draft: Draft | null;
   change: (value: Draft) => void;
   disabled: boolean;
   save: () => void;
-  conversation: string;
-  setConversation: (value: string) => void;
+  panel: PanelState;
+  savedMessages: PanelState['messages'];
+  changePanel: (value: PanelState) => void;
+  saveRequirement: () => void;
   settings: () => void;
 }) {
-  const [tab, setTab] = useState<'config' | 'chat'>('config');
+  const tab = panel.activeTab;
+  const setTab = (activeTab: PanelState['activeTab']) => changePanel({ ...panel, activeTab });
   const [factName, setFactName] = useState('');
   const [factError, setFactError] = useState('');
   const configRef = useRef<HTMLButtonElement>(null);
@@ -121,18 +126,7 @@ export function RightPanel({ draft, change, disabled, save, conversation, setCon
       </fieldset>}
     </div>
     <div className="panel-scroll chat-panel" role="tabpanel" id="chat-panel" aria-labelledby="chat-tab" hidden={tab !== 'chat'}>
-      <div className="assistant-intro">
-        <span className="assistant-mark">✦</span>
-        <h3>先整理想法，再开始创作</h3>
-        <p>连接创作助手后，可生成方案。</p>
-        <Button onClick={settings}>连接创作助手</Button>
-      </div>
-      <div className="chat-compose">
-        <label>创作需求<textarea value={conversation} onChange={e => setConversation(e.target.value)} placeholder="例如：保留瓶身和标签，换成浅灰摄影棚背景。" />
-        </label>
-        <small>需求草稿仅保留在本次会话。方案执行尚未接入。</small>
-        <Button disabled>发送需求</Button>
-      </div>
+      <ConversationPanel panel={panel} savedMessages={savedMessages} change={chatDraft => changePanel({ ...panel, chatDraft })} saveRequirement={saveRequirement} disabled={disabled || !draft} settings={settings} />
     </div>
   </aside>;
 }

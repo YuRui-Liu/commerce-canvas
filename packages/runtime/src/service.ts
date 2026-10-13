@@ -4,19 +4,29 @@ import { openDatabase } from './db/open';
 import { ProjectRepository } from './projects/repository';
 import { AssetService } from './assets/import';
 import { SettingsRepository } from './settings/repository';
+import { CanvasRepository } from './canvases/repository';
 import { probeRuntime } from './index';
 import { internalSchemas, RpcRequestSchema } from '../../contracts/src/bridge';
 import { DomainError } from '../../contracts/src/errors';
 export class RuntimeService {
-  private readonly db; readonly projects; readonly assets; readonly settings;
+  private readonly db; readonly projects; readonly assets; readonly settings; readonly canvases;
   constructor(root: string) {
     mkdirSync(root, { recursive: true }); this.db = openDatabase(join(root, 'commercecanvas.sqlite'));
     this.projects = new ProjectRepository(this.db); this.assets = new AssetService(this.db, root); this.settings = new SettingsRepository(this.db);
+    this.canvases = new CanvasRepository(this.db);
   }
   async dispatch(request: unknown): Promise<unknown> {
     const { method, payload } = RpcRequestSchema.parse(request);
     // Each branch reparses to retain precise types after the envelope validation.
     switch (method) {
+      case 'listCanvases': return this.canvases.list(internalSchemas.listCanvases.parse(payload).projectId);
+      case 'createCanvas': { const p = internalSchemas.createCanvas.parse(payload); return this.canvases.create(p.projectId, p.name); }
+      case 'loadCanvas': { const p = internalSchemas.loadCanvas.parse(payload); return this.canvases.load(p.projectId, p.canvasId); }
+      case 'saveCanvas': { const p = internalSchemas.saveCanvas.parse(payload); return this.canvases.save(p.projectId, p.document, p.panel, p.expectedRevision); }
+      case 'getSelectedCanvas': return this.canvases.selected(internalSchemas.getSelectedCanvas.parse(payload).projectId);
+      case 'selectCanvas': { const p = internalSchemas.selectCanvas.parse(payload); return this.canvases.select(p.projectId, p.canvasId); }
+      case 'getCurrentProject': return this.settings.getCurrentProject();
+      case 'setCurrentProject': return this.settings.setCurrentProject(internalSchemas.setCurrentProject.parse(payload).projectId);
       case 'health': return probeRuntime();
       case 'listProjects': return this.projects.list();
       case 'createProject': return this.projects.create(internalSchemas.createProject.parse(payload).name);

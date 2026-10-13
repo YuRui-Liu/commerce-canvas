@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { IdSchema, NameSchema, RevisionSchema, ProductUpdateSchema, ThemeSchema, type Project, type AssetVersion, type Sku, type BrandProfile } from './domain';
 import type { RuntimeHealth } from '../../runtime/src/index';
+import { CanvasDocumentSchema, PanelStateSchema, type CanvasRecord, type CanvasSummary } from './canvas';
 const empty = z.object({}).strict();
 const project = z.object({ projectId: IdSchema }).strict();
 export const CredentialServiceSchema = z.enum(['grsai', 'deepseek']);
@@ -9,6 +10,12 @@ export const CredentialMetadataSchema = z.object({ credentialId: IdSchema, servi
 export type CredentialMetadata = z.infer<typeof CredentialMetadataSchema>;
 export type AssetImportResult = { name: string; ok: true; version: AssetVersion } | { name: string; ok: false; error: 'INVALID_IMAGE' | 'IMPORT_FAILED' | 'TOO_MANY_FILES' };
 export const requestSchemas = {
+  listCanvases: project,
+  createCanvas: z.object({ projectId: IdSchema, name: NameSchema }).strict(),
+  loadCanvas: z.object({ projectId: IdSchema, canvasId: z.string().min(1).max(200) }).strict(),
+  saveCanvas: z.object({ projectId: IdSchema, document: CanvasDocumentSchema, panel: PanelStateSchema, expectedRevision: RevisionSchema }).strict(),
+  getSelectedCanvas: project,
+  selectCanvas: z.object({ projectId: IdSchema, canvasId: z.string().min(1).max(200) }).strict(),
   health: empty, listProjects: empty, createProject: z.object({ name: NameSchema }).strict(),
   getProject: project,
   updateProject: z.object({ projectId: IdSchema, expectedRevision: RevisionSchema, update: ProductUpdateSchema }).strict(),
@@ -36,6 +43,8 @@ export function parseRequest(method: unknown, payload: unknown) {
   return parsed.data;
 }
 export interface Results {
+  listCanvases: CanvasSummary[]; createCanvas: CanvasRecord; loadCanvas: CanvasRecord; saveCanvas: CanvasRecord;
+  getSelectedCanvas: string | null; selectCanvas: string;
   health: RuntimeHealth; listProjects: Project[]; createProject: Project;
   getProject: { project: Project; skus: Sku[]; brand: BrandProfile | null } | null;
   updateProject: Project; renameProject: Project; deleteProject: null;
@@ -48,7 +57,9 @@ export interface Results {
 }
 export type DesktopBridge = { [K in Method]: keyof z.input<(typeof requestSchemas)[K]> extends never
   ? (payload?: z.input<(typeof requestSchemas)[K]>) => Promise<Results[K]>
-  : (payload: z.input<(typeof requestSchemas)[K]>) => Promise<Results[K]> };
+  : (payload: z.input<(typeof requestSchemas)[K]>) => Promise<Results[K]> } & {
+    onFlushRequested: (handler: () => Promise<void>) => () => void;
+  };
 export const internalSchemas = {
   ...requestSchemas,
   getAssetResponse: z.object({ projectId: IdSchema, versionId: IdSchema, variant: z.enum(['original', 'thumbnail']) }).strict(),

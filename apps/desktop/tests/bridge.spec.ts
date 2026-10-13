@@ -21,7 +21,7 @@ test('typed bridge persists projects, assets and theme and isolates asset access
     }, image);
     const url = `commerce-asset://asset/${ids.versionId}/original`;
     expect(await page.evaluate(url => new Promise(resolve => { const img = new Image(); img.onload = () => resolve(img.naturalWidth); img.onerror = () => resolve(0); img.src = url; document.body.append(img); }), url)).toBe(3);
-    await page.evaluate(async () => { const p = await window.commerceCanvas.createProject({ name: 'Other' }); await window.commerceCanvas.setCurrentProject({ projectId: p.id }); });
+    const selectedProject = await page.evaluate(async () => { const p = await window.commerceCanvas.createProject({ name: 'Other' }); await window.commerceCanvas.setCurrentProject({ projectId: p.id }); return p.id; });
     // Reload releases decoded Image resources; verify a new protocol request, not a DOM memory-cache hit.
     await page.reload();
     expect(await page.evaluate(url => new Promise(resolve => { const img = new Image(); img.onload = () => resolve('loaded'); img.onerror = () => resolve('denied'); img.src = url; }), url)).toBe('denied');
@@ -29,6 +29,6 @@ test('typed bridge persists projects, assets and theme and isolates asset access
     const restored = await app.firstWindow();
     expect(await restored.evaluate(() => window.commerceCanvas.getTheme({}))).toBe('editorial');
     expect(await restored.evaluate(id => window.commerceCanvas.listAssets({ projectId: id }), ids.projectId)).toHaveLength(2);
-    expect(await restored.evaluate(() => window.commerceCanvas.getCurrentProject({}))).toBeNull();
+    expect(await restored.evaluate(() => window.commerceCanvas.getCurrentProject({}))).toBe(selectedProject);
   } finally { await app.close(); rmSync(root, { recursive: true, force: true }); }
 });

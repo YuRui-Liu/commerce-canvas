@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AssetVersion, Project } from '../../../../../packages/contracts/src/domain';
 import { ProductUpdateSchema } from '../../../../../packages/contracts/src/domain';
 import { Button } from '../../../../../packages/ui/src/Button';
@@ -17,10 +17,14 @@ import {ImageViewer} from '../../../../../packages/ui/src/ImageViewer';
 import {ImageCompare} from '../../../../../packages/ui/src/ImageCompare';
 import type {AssetInput} from '../../../../../packages/canvas/src/AssetDropZone';
 import type {CanvasDocument} from '../../../../../packages/contracts/src/canvas';
+import { emptyPanel } from '../../../../../packages/contracts/src/canvas';
+import { useCanvasSync } from '../../../../../packages/canvas/src/useCanvasSync';
+import { recordRequirement } from './panelState';
 import type {AssetImportResult} from '../../../../../packages/contracts/src/bridge';
 const bridge = window.commerceCanvas;
 export function Workspace() {
   const canvas=useRef<CanvasHandle>(null);
+  const sync = useCanvasSync(bridge);
   const [projects, setProjects] = useState<Project[]>([]);
   const [project, setProject] = useState<Project>();
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -35,25 +39,30 @@ export function Workspace() {
   const [modal, setModal] = useState<'create' | 'rename' | 'text' | 'settings' | null>(null);
   const [value, setValue] = useState('');
   const [modalError, setModalError] = useState('');
-  const [conversations, setConversations] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState('');
   const [view, setView] = useState<AssetVersion | null>(null);
   const [comparison,setComparison]=useState<AssetVersion[]>([]);
-  const [selection,setSelection]=useState<string[]>([]);
-  const [graph,setGraph]=useState<CanvasDocument>();
-  const [textDrafts,setTextDrafts]=useState<Record<string,string>>({});
+  const graph = sync.record?.document;
+  const panel = sync.record?.panel ?? emptyPanel();
+  const selection = panel.selectedIds;
+  const textDrafts = panel.inspectorDrafts;
+  const setSelection = useCallback((selectedIds: string[]) => sync.editPanel(previous => JSON.stringify(previous.selectedIds) === JSON.stringify(selectedIds) ? previous : ({ ...previous, selectedIds, activeTab: selectedIds.length ? 'config' : previous.activeTab })), [sync.editPanel]);
+  const setGraph = useCallback((document: CanvasDocument) => sync.edit({ document }), [sync.edit]);
   const [importResults,setImportResults]=useState<AssetImportResult[]>([]);
   const { error: themeError } = useTheme();
   const refresh = async () => setProjects(await bridge.listProjects());
   async function load(id: string) {
+    canvas.current?.cancelPending();
+    await sync.flush();
     // Release decoded images before changing the main process asset-access context.
     setAssets([]);
     setView(null);
-    setComparison([]);setSelection([]);setGraph(undefined);
+    setComparison([]);setImportResults([]);
     const data = await bridge.getProject({ projectId: id });
     if (!data)
       throw Error('NOT_FOUND');
     await bridge.setCurrentProject({ projectId: id });
+    await sync.loadProject(id);
     setProject(data.project);
     setProjects(list => list.map(p => p.id === id ? data.project : p));
     setDraft({
@@ -85,6 +94,24 @@ export function Workspace() {
       }
     })();
   }, []);
+  const closeHandler = useRef<() => Promise<void>>(async () => {});
+  closeHandler.current = async () => {
+    const start = Date.now();
+    while (lock.current) {
+      if (Date.now() - start > 10000) throw Error('WORKSPACE_BUSY');
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    lock.current = true; setBusy(true);
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        (async () => { await canvas.current?.flushPending(); await sync.flush(); if (!await save()) throw Error('PROJECT_SAVE_FAILED'); })(),
+        new Promise<never>((_, reject) => { timeout = setTimeout(() => reject(Error('FLUSH_TIMEOUT')), 12000); }),
+      ]);
+    } catch (error) { setStatus('关闭前保存失败，草稿已保留。'); throw error; }
+    finally { clearTimeout(timeout); lock.current = false; setBusy(false); }
+  };
+  useEffect(() => bridge.onFlushRequested(() => closeHandler.current()), []);
   async function save(): Promise<boolean> {
     if (!project || !draft || !dirty)
       return true;
@@ -222,7 +249,7 @@ export function Workspace() {
   }
   const selectedNode=graph?.nodes.find(n=>n.id===selection[0]);
   const selectedAsset=assets.find(a=>a.id===selectedNode?.assetVersionId);
-  const draftKey=selectedNode?`${project?.id}:${selectedNode.id}`:'';
+  const draftKey=selectedNode?.id??'';
   async function saveNodeText(){
     if(!project||!selectedNode||selectedAsset?.kind!=='text')return;
     const nodeId=selectedNode.id,assetId=selectedAsset.assetId,text=textDrafts[draftKey]??selectedAsset.text??'';
@@ -287,13 +314,23 @@ export function Workspace() {
         {!!importResults.length&&<ul className="import-results" aria-label="逐文件导入结果">{importResults.map((result,index)=><li key={index}>{result.name}：{result.ok?'成功':'失败（请检查格式、大小或文件）'}</li>)}</ul>}
         <div className="library-foot">素材保存在本机</div>
       </aside>}
-      <CanvasRegion ref={canvas} project={project} assets={assets} onView={setView} right={right} busy={busy} toggleRight={() => setRight(!right)} upload={() => void importImages()} addText={() => open('text')} create={() => open('create')} onAssetInput={(input,position)=>void receiveAsset(input,position)} onDocumentChange={setGraph} onSelectionChange={setSelection}/>
-      {right && (selectedNode&&graph?<AssetInspector node={selectedNode} asset={selectedAsset} document={graph} draft={textDrafts[draftKey]??selectedAsset?.text??''} onDraft={text=>setTextDrafts(d=>({...d,[draftKey]:text}))} onSave={()=>void saveNodeText()} onRole={(id,role)=>canvas.current?.setEdgeRole(id,role)} onClose={()=>setSelection([])} onFacts={()=>{setSelection([]);requestAnimationFrame(()=>document.querySelector<HTMLTextAreaElement>('.right-panel textarea')?.focus());}} busy={busy}/>:<RightPanel draft={draft} change={d => { setDraft(d); setDirty(true); setStatus('有未保存修改'); }} disabled={busy} save={() => void perform(async () => { await save(); })} conversation={conversations[project?.id ?? 'none'] ?? ''} setConversation={text => setConversations(c => ({ ...c, [project?.id ?? 'none']: text }))} settings={() => open('settings')} />)}
+      <CanvasRegion ref={canvas} project={project} record={sync.record} canvases={sync.list} epoch={sync.epoch}
+        selectCanvas={id => void perform(async () => { canvas.current?.cancelPending(); await sync.loadProject(project!.id, id); })}
+        createCanvas={() => void perform(async () => { canvas.current?.cancelPending(); await sync.create(project!.id); })}
+        assets={assets} onView={setView} right={right} busy={busy} toggleRight={() => setRight(!right)} upload={() => void importImages()} addText={() => open('text')} create={() => open('create')} onAssetInput={(input,position)=>void receiveAsset(input,position)} onDocumentChange={setGraph} onSelectionChange={setSelection}/>
+      {right && (selectedNode&&graph&&panel.activeTab!=='chat'?<AssetInspector node={selectedNode} asset={selectedAsset} document={graph} draft={textDrafts[draftKey]??selectedAsset?.text??''}
+        onDraft={text=>sync.editPanel(p=>({...p,inspectorDrafts:{...p.inspectorDrafts,[draftKey]:text}}))}
+        onSave={()=>void saveNodeText()} onRole={(id,role)=>canvas.current?.setEdgeRole(id,role)} onChat={()=>sync.editPanel(p=>({...p,activeTab:'chat'}))}
+        onClose={()=>canvas.current?.clearSelection()} onFacts={()=>{canvas.current?.clearSelection();sync.editPanel(p=>({...p,activeTab:'config'}));requestAnimationFrame(()=>document.querySelector<HTMLTextAreaElement>('.right-panel textarea')?.focus());}} busy={busy}/>
+        :<RightPanel draft={draft} change={d => { setDraft(d); setDirty(true); setStatus('有未保存修改'); }} disabled={busy} save={() => void perform(async () => { await save(); })}
+          panel={panel} savedMessages={sync.savedMessages} changePanel={next=>sync.editPanel(()=>next)}
+          saveRequirement={()=>void perform(async()=>{if(graph){sync.editPanel(p=>recordRequirement(p,graph));await sync.flush();}})} settings={() => open('settings')} />)}
     </div>
     <footer className="statusbar">
       <span role="status">{themeError || status}{project && !conflict ? ` · 修订 ${project.revision}` : ''}</span>
-      <span>本地优先 · 自由创作</span>
+      <span>{sync.status || '本地优先 · 自由创作'}</span>
     </footer>
+    {sync.failed && <div className="conflict-banner" role="alert"><strong>画布保存失败或发生修订冲突</strong><span>当前草稿已保留；重新载入会舍弃本画布草稿，另存会保留为新画布。</span>{!sync.conflict&&<Button disabled={busy} onClick={()=>void perform(sync.retry)}>重试画布保存</Button>}<Button disabled={busy} onClick={()=>void perform(sync.reload)}>重新载入画布</Button><Button disabled={busy} onClick={()=>void perform(sync.copy)}>另存画布副本</Button></div>}
     {conflict && <div className="conflict-banner" role="alert">
       <strong>内容已在另一处更新</strong>
       <span>重新载入会舍弃当前资料草稿；另存会创建资料副本。</span>
