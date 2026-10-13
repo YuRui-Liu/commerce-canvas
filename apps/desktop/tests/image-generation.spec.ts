@@ -4,6 +4,19 @@ import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import type {ElectronApplication,Page} from '@playwright/test';
 const launchTarget=process.env.COMMERCECANVAS_EXECUTABLE?{executablePath:process.env.COMMERCECANVAS_EXECUTABLE,args:[]}:{args:[resolve('apps/desktop/dist/main/index.js')]};
+test('generation revision conflict copies prepared node and chat snapshot without old run ownership',async()=>{
+ const root=mkdtempSync(join(tmpdir(),'commercecanvas-e2e-generation-copy-'));
+ const app=await electron.launch({...launchTarget,env:{...process.env,COMMERCECANVAS_TEST_USER_DATA:root}});
+ try{
+  const page=await app.firstWindow();await expect(page.getByRole('status')).toHaveText('本地工作区');await create(page);
+  const card=page.locator('.generation-card');await card.getByLabel('画面描述').fill('保留生成草稿');await card.getByRole('button',{name:'生成图片',exact:true}).click();await page.getByRole('dialog',{name:'确认图片生成'}).getByRole('button',{name:'取消',exact:true}).click();await page.waitForTimeout(600);
+  await page.evaluate(async()=>{const b=window.commerceCanvas,projectId=(await b.getCurrentProject())!,canvasId=(await b.getSelectedCanvas({projectId}))!,c=await b.loadCanvas({projectId,canvasId});await b.saveCanvas({projectId,document:c.document,panel:{...c.panel,messages:[{id:crypto.randomUUID(),role:'user',text:'历史生成上下文',selectedNodes:c.document.nodes,createdAt:new Date().toISOString()}]},expectedRevision:c.document.revision});});
+  await page.reload();await expect(card.getByLabel('画面描述')).toHaveValue('保留生成草稿');const original=await saved(page);
+  await page.evaluate(async()=>{const b=window.commerceCanvas,projectId=(await b.getCurrentProject())!,canvasId=(await b.getSelectedCanvas({projectId}))!,c=await b.loadCanvas({projectId,canvasId});await b.saveCanvas({projectId,document:c.document,panel:c.panel,expectedRevision:c.document.revision});});
+  await card.getByLabel('画面描述').fill('冲突中的新草稿');await expect(page.getByRole('alert')).toContainText('修订冲突');await page.getByRole('button',{name:'另存画布副本'}).click();await expect(page.getByRole('alert')).toHaveCount(0);
+  const copy=await saved(page);expect(copy.document.id).not.toBe(original.document.id);expect(copy.document.nodes[0].generation?.prompt).toBe('冲突中的新草稿');expect(copy.document.nodes[0].runId).toBeUndefined();expect(copy.panel.messages[0].selectedNodes[0].runId).toBeUndefined();expect(copy.panel.messages[0].text).toBe('历史生成上下文');expect(copy.panel.generationDeliveries).toEqual([]);expect(original.document.nodes[0].runId).toBeTruthy();
+ }finally{await app.close();rmSync(root,{recursive:true,force:true});}
+});
 async function create(page:Page,name='商品摄影'){
  await page.getByRole('button',{name:'创建项目',exact:true}).first().click();await page.getByLabel('项目名称').fill(name);await page.getByRole('button',{name:'创建',exact:true}).click();
  await page.getByRole('button',{name:'添加出图节点',exact:true}).click();await expect(page.locator('.generation-card')).toBeVisible();

@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import type { CanvasRecord, CanvasDocument, PanelState, CanvasSummary } from '../../contracts/src/canvas';
 import type { DesktopBridge } from '../../contracts/src/bridge';
 import { SaveCoordinator } from './saveCoordinator';
+import { canvasCopyDraft } from './canvasCopyDraft';
 
 export function useCanvasSync(bridge: DesktopBridge) {
   const [record, setRecord] = useState<CanvasRecord>();
@@ -75,7 +76,8 @@ export function useCanvasSync(bridge: DesktopBridge) {
     clearTimeout(timer.current);
     const projectId = current.document.projectId!;
     const created = await bridge.createCanvas({ projectId, name: `${current.name.slice(0, 180)} · 草稿副本` });
-    const saved = await bridge.saveCanvas({ projectId, document: { ...current.document, id: created.document.id }, panel: current.panel, expectedRevision: 1 });
+    const draft = canvasCopyDraft(current, created.document.id);
+    const saved = await bridge.saveCanvas({ projectId, document: draft.document, panel: draft.panel, expectedRevision: 1 });
     await bridge.selectCanvas({ projectId, canvasId: saved.document.id });
     setList(await bridge.listCanvases({ projectId })); install(saved);
   }, [bridge, install]);

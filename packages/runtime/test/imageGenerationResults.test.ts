@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os';
 import sharp from 'sharp';
 import { RuntimeService } from '../src/service';
 import { defaultGenerationSettings } from '../../contracts/src/imageGeneration';
+import { canvasCopyDraft } from '../../canvas/src/canvasCopyDraft';
+import {randomUUID} from 'node:crypto';
 let root:string, runtime:RuntimeService;
 beforeEach(()=>{root=mkdtempSync(join(tmpdir(),'generation-results-'));runtime=new RuntimeService(root);});
 afterEach(async()=>{await runtime.close();rmSync(root,{recursive:true,force:true});});
@@ -24,6 +26,26 @@ it('archives stable IDs once, keeps actual dimensions, and rejects different byt
  expect(runtime.generations.get(s.project.id,s.run.id).slots[0]).toMatchObject({status:'succeeded',warning:'DIMENSIONS_DIFFER'});
  const other=await sharp(s.bytes).negate().png().toBuffer();
  await expect(runtime.generationResults.archive({...s.target,bytes:other})).rejects.toThrow();
+});
+it('copies a conflicted generation draft with assets and message snapshots but without old canvas run references',async()=>{
+ const s=await setup(),asset=await runtime.generationResults.archive({...s.target,bytes:s.bytes});
+ const base=runtime.canvases.load(s.project.id,s.canvas.document.id);
+ const nodes=[{...base.document.nodes[0],runId:s.run.id},{id:'output',kind:'output' as const,runId:s.run.id,assetVersionId:asset.id,position:{x:400,y:0}}];
+ const draft={...base,document:{...base.document,nodes},panel:{...base.panel,chatDraft:'unsaved draft',generationDeliveries:[asset.id],messages:[{id:randomUUID(),role:'user' as const,text:'keep this result',selectedNodes:nodes,createdAt:new Date().toISOString()}]}};
+ runtime.canvases.save(s.project.id,base.document,base.panel,base.document.revision);
+ expect(()=>runtime.canvases.save(s.project.id,draft.document,draft.panel,base.document.revision)).toThrow(/REVISION_CONFLICT/);
+ const created=runtime.canvases.create(s.project.id,'copy');
+ expect(()=>runtime.canvases.save(s.project.id,{...draft.document,id:created.document.id},draft.panel,1)).toThrow(/INVALID_REFERENCE/);
+ const copy=canvasCopyDraft(draft,created.document.id);
+ const saved=runtime.canvases.save(s.project.id,copy.document,copy.panel,1);
+ expect(saved.document.nodes.map(n=>n.runId)).toEqual([undefined,undefined]);
+ expect(saved.panel.messages[0].selectedNodes.map(n=>n.runId)).toEqual([undefined,undefined]);
+ expect(saved.document.nodes[0].generation).toEqual(nodes[0].generation);
+ expect(saved.document.nodes[1].assetVersionId).toBe(asset.id);
+ expect(saved.panel.messages[0].selectedNodes[1].assetVersionId).toBe(asset.id);
+ expect(saved.panel.chatDraft).toBe('unsaved draft');expect(saved.panel.generationDeliveries).toEqual([]);
+ expect(draft.document.nodes[0].runId).toBe(s.run.id);expect(draft.panel.generationDeliveries).toEqual([asset.id]);
+ expect(runtime.generations.list(s.project.id).filter(run=>run.canvasId===created.document.id)).toEqual([]);
 });
 it('adapts contain/cover to requested pixels with stable provenance and preserves original bytes',async()=>{
  const s=await setup(),original=await runtime.generationResults.archive({...s.target,bytes:s.bytes});
