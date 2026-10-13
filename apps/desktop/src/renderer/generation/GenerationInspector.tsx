@@ -2,6 +2,7 @@ import {useState} from 'react';
 import type {CanvasNode} from '../../../../../packages/contracts/src/canvas';
 import {defaultGenerationSettings,type GenerationRun,type GenerationSettings,type GenerationSlot} from '../../../../../packages/contracts/src/imageGeneration';
 import {GenerationControls} from './GenerationControls';
+import {newestGenerations} from './generationSelection';
 import {runLabel} from './useGenerationRuns';
 import {Dialog} from '../../../../../packages/ui/src/Dialog';
 type Actions={onAct:(run:GenerationRun,action:'resume'|'stop'|'bind',slotIndex?:number,remoteId?:string)=>void;onAdapt:(run:GenerationRun,slot:number,fit:'contain'|'cover',background:string)=>void};
@@ -21,7 +22,7 @@ function Slot({run,slot,busy,onAct,onAdapt}:Actions&{run:GenerationRun;slot:Gene
  </article>;
 }
 export function GenerationInspector({node,runs,busy,error,onChange,onGenerate,onClose,onAct,onAdapt}:Actions&{node?:CanvasNode;runs:GenerationRun[];busy:boolean;error:string;onChange:(settings:GenerationSettings)=>void;onGenerate:()=>void;onClose:()=>void}){
- const [historyId,setHistoryId]=useState<string>();const current=runs.find(r=>r.id===(historyId??node?.runId))??runs[0];
+ const [historyId,setHistoryId]=useState<string>();runs=newestGenerations(runs);const current=runs.find(r=>r.id===(historyId??node?.runId))??runs[0];
  return <aside className="right-panel generation-inspector"><div className="panel-heading"><h2>{node?'图片生成':'生成历史'}</h2><button className="button" onClick={onClose}>关闭</button></div><div className="generation-inspector-body">
   {node?.kind==='generation'&&<><p className="muted">连接商品与参考素材，调整画面表达。</p><GenerationControls value={node.generation??defaultGenerationSettings()} onChange={onChange} onGenerate={onGenerate} busy={busy}/></>}
   <section className="generation-history"><h3>生成记录 <small>{runs.length} 次</small></h3>{!runs.length?<p className="muted">还没有生成记录。每次确认后的参数与输入都会保留。</p>:<label>历史任务<select value={current?.id??''} onChange={e=>setHistoryId(e.target.value)}>{runs.map(r=><option key={r.id} value={r.id}>{new Date(r.createdAt).toLocaleString('zh-CN')} · {runLabel(r)}</option>)}</select></label>}

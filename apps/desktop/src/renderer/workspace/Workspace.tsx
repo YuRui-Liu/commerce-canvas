@@ -26,6 +26,7 @@ import {GenerationControls} from '../generation/GenerationControls';
 import {GenerationInspector} from '../generation/GenerationInspector';
 import {GenerationReview} from '../generation/GenerationReview';
 import {useGenerationRuns,runLabel} from '../generation/useGenerationRuns';
+import {latestApprovedGeneration} from '../generation/generationSelection';
 const bridge = window.commerceCanvas;
 export function Workspace() {
   const canvas=useRef<CanvasHandle>(null);
@@ -302,7 +303,7 @@ export function Workspace() {
   const generation=useGenerationRuns({projectId:project?.id,canvasId:graph?.id,canvas,sync,blocked:busy,setAssets,saveProduct:save});
   const generationSelected=selectedNode?.kind==='generation';
   const generationRuns=generationHistory?generation.runs:generation.runs.filter(r=>r.nodeId===selectedNode?.id||r.id===selectedNode?.runId);
-  const approvedGeneration=(id:string)=>generation.runs.find(r=>r.id===graph?.nodes.find(n=>n.id===id)?.runId&&r.approvedAt)||generation.runs.find(r=>r.nodeId===id&&r.approvedAt);
+  const approvedGeneration=(id:string)=>latestApprovedGeneration(generation.runs,id,graph?.nodes.find(n=>n.id===id)?.runId);
   return <div className="app-shell">
     <header className="topbar">
       <div className="brand">
