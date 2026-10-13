@@ -22,7 +22,14 @@ test('secure desktop displays capabilities verified inside Electron utility proc
     expect(result.electron).toBeTruthy();
     expect(await page.evaluate(() => typeof (window as unknown as { require?: unknown }).require)).toBe('undefined');
     const preferences = await app.evaluate(({ BrowserWindow }) => (BrowserWindow.getAllWindows()[0].webContents as unknown as { getLastWebPreferences(): Record<string, unknown> }).getLastWebPreferences());
-    expect(preferences).toMatchObject({ contextIsolation: true, sandbox: true, nodeIntegration: false });
+    expect(preferences).toMatchObject({ contextIsolation: true, sandbox: true, nodeIntegration: false, backgroundThrottling: false });
+    expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().map(window => ({ visible: window.isVisible(), focused: window.isFocused() })))).toEqual([{ visible: false, focused: false }]);
+    const pickerError = await page.evaluate(async () => {
+      const project = await window.commerceCanvas.createProject({ name: '隐藏选择框验证' });
+      try { await window.commerceCanvas.importAssetsBatch({ projectId: project.id }); return 'UNEXPECTED_SUCCESS'; }
+      catch (error) { return String(error); }
+    });
+    expect(pickerError).toContain('NATIVE_DIALOG_DISABLED_IN_TEST');
     console.log('UTILITY_HEALTH', JSON.stringify(result));
     await page.screenshot({ path: 'apps/desktop/dist/foundation-desktop.png' });
     await page.keyboard.press('Escape');

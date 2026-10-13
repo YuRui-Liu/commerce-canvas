@@ -9,6 +9,8 @@ import { CredentialStore } from './credentials';
 import { validateSender } from './ipc';
 import { parseRequest, requestSchemas, type AssetImportResult } from '../../../../packages/contracts/src/bridge';
 import { assetScheme } from './assetProtocol';
+import { assertNativeDialogAllowed } from './nativeDialogPolicy';
+const nativeOpenDialog = dialog.showOpenDialog;
 protocol.registerSchemesAsPrivileged([assetScheme]);
 const isolated = process.env.COMMERCECANVAS_TEST_USER_DATA;
 if (isolated) {
@@ -99,6 +101,7 @@ void app.whenReady().then(async () => {
     if (method === 'importAssets' || method === 'importAssetsBatch') {
       const { projectId } = requestSchemas.importAssets.parse(payload);
       if (!await runtime.request('getProject', { projectId })) throw new Error('NOT_FOUND');
+      assertNativeDialogAllowed(!!isolated, dialog.showOpenDialog, nativeOpenDialog);
       const selected = await dialog.showOpenDialog(window, { properties: ['openFile', 'multiSelections'], filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp'] }] });
       if (selected.canceled) return [];
       if (selected.filePaths.length > 100) throw new Error('TOO_MANY_FILES');

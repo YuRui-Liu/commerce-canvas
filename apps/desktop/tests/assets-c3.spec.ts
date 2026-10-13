@@ -42,6 +42,9 @@ test('C3 native import picker reports each bad file and keeps the good file',asy
  const valid=join(root,'good.png'),invalid=join(root,'broken.png');writeFileSync(valid,await sharp({create:{width:40,height:80,channels:4,background:'#765c3f'}}).png().toBuffer());writeFileSync(invalid,'invalid png');
  const app=await electron.launch({...(process.env.COMMERCECANVAS_EXECUTABLE?{executablePath:process.env.COMMERCECANVAS_EXECUTABLE,args:[]}:{args:[resolve('apps/desktop/dist/main/index.js')]}),env:{...process.env,COMMERCECANVAS_TEST_USER_DATA:root}});
  try{const page=await app.firstWindow();await page.getByRole('button',{name:'创建项目',exact:true}).first().click();await page.getByLabel('项目名称').fill('原生文件批量导入');await page.getByRole('button',{name:'创建',exact:true}).click();
+ await expect(page.getByLabel('当前画布',{exact:true})).toBeVisible();
+ const pickerError=await page.evaluate(async()=>{try{await window.commerceCanvas.importAssetsBatch({projectId:(await window.commerceCanvas.getCurrentProject())!});return 'UNEXPECTED_SUCCESS';}catch(error){return String(error);}});
+ expect(pickerError).toContain('NATIVE_DIALOG_DISABLED_IN_TEST');
  // Only the user's picker selection is supplied. Main-process reads and real runtime storage execute normally.
  await app.evaluate(({dialog},paths)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:paths});},[invalid,valid]);
  await page.getByRole('button',{name:'上传图片',exact:true}).first().click();await expect(page.getByLabel('逐文件导入结果')).toContainText('broken.png：失败');await expect(page.getByLabel('逐文件导入结果')).toContainText('good.png：成功');
