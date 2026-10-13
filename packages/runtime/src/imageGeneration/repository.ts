@@ -65,7 +65,20 @@ export class ImageGenerationRepository {
     this.db.exec("UPDATE image_slots SET status='unknown',error='Submission interrupted before remote ID was saved' WHERE status='submitting' AND remote_id IS NULL; UPDATE image_slots SET status='running' WHERE status='submitting' AND remote_id IS NOT NULL;");
     for(const row of affected)this.refresh(String(row.run_id));return this.listRecoverable();
   });}
-  private slots(runId:string):GenerationSlot[]{return this.db.prepare('SELECT run_id AS runId,slot_index AS slotIndex,attempt_id AS attemptId,output_asset_id AS outputAssetId,output_version_id AS outputVersionId,remote_id AS remoteId,status,error,progress,result_version_id AS resultVersionId,actual_width AS actualWidth,actual_height AS actualHeight FROM image_slots WHERE run_id=? ORDER BY slot_index').all(runId) as unknown as GenerationSlot[];}
+  private slots(runId:string):GenerationSlot[]{return this.db.prepare('SELECT run_id AS runId,slot_index AS slotIndex,attempt_id AS attemptId,output_asset_id AS outputAssetId,output_version_id AS outputVersionId,remote_id AS remoteId,status,error,progress,result_version_id AS resultVersionId,actual_width AS actualWidth,actual_height AS actualHeight,warning FROM image_slots WHERE run_id=? ORDER BY slot_index').all(runId).map(row=>({...row,derivatives:this.db.prepare('SELECT version_id AS versionId,source_version_id AS sourceVersionId,fit,background,width,height FROM generation_outputs WHERE run_id=? AND slot_index=? AND source_version_id IS NOT NULL ORDER BY derivative_key').all(runId,Number(row.slotIndex))})) as unknown as GenerationSlot[];}
+  resultUrl(projectId:string,runId:string,index:number):string|null {
+    this.get(projectId,runId);this.slot(runId,index);
+    const row=this.db.prepare('SELECT result_url FROM image_slots WHERE run_id=? AND slot_index=?').get(runId,index)!;
+    return row.result_url===null?null:String(row.result_url);
+  }
+  recordResult(projectId:string,runId:string,index:number,url:string):void {
+    const parsed=new URL(url);if(parsed.protocol!=='https:'||parsed.username||parsed.password)invalid('Invalid result URL');
+    this.transaction(()=>{this.get(projectId,runId);const slot=this.slot(runId,index);
+      if(!slot.remoteId||!['running','unknown','downloading'].includes(slot.status))invalid('Result requires a known task');
+      const prior=this.resultUrl(projectId,runId,index);if(prior&&prior!==url)invalid('Result URL already recorded');
+      this.db.prepare("UPDATE image_slots SET status='downloading',result_url=?,error=NULL WHERE run_id=? AND slot_index=?").run(url,runId,index);this.refresh(runId);
+    });
+  }
   private slot(runId:string,index:number):GenerationSlot {const slot=this.slots(runId).find(s=>s.slotIndex===index);if(!slot)throw new DomainError('NOT_FOUND','Generation slot not found');return slot;}
   private refresh(runId:string){
     const slots=this.slots(runId);if(!slots.length)return;
@@ -88,7 +101,7 @@ export class ImageGenerationRepository {
   }
   /** Caller must validate the task with provider GET before binding. This never submits. */
   bindUnknown(projectId:string,runId:string,slotIndex:number,remoteId:string):GenerationSlot {
-    return this.transaction(()=>{this.get(projectId,runId);const slot=this.slot(runId,slotIndex);if(slot.status!=='unknown'||slot.remoteId)invalid('Only unknown slots without a remote ID can be bound');this.setRemote(runId,slotIndex,remoteId);return this.slot(runId,slotIndex);});
+    return this.transaction(()=>{this.get(projectId,runId);const slot=this.slot(runId,slotIndex);if(slot.status!=='unknown'||slot.remoteId)invalid('Only unknown slots without a remote ID can be bound');this.setRemote(runId,slotIndex,remoteId);this.db.prepare("UPDATE image_slots SET warning='BOUND_TASK_INPUTS_UNVERIFIED' WHERE run_id=? AND slot_index=?").run(runId,slotIndex);return this.slot(runId,slotIndex);});
   }
   private setRemote(runId:string,index:number,id:string){if(!id.trim()||id.length>500)invalid('Invalid remote ID');this.db.prepare("UPDATE image_slots SET remote_id=?,status='running',error=NULL WHERE run_id=? AND slot_index=?").run(id,runId,index);this.refresh(runId);}
   updateSlot(runId:string,slotIndex:number,update:{status:GenerationStatus;progress?:number;error?:string}):GenerationSlot {
@@ -107,7 +120,9 @@ export class ImageGenerationRepository {
       const version=new AssetRepository(this.db).get(versionId,projectId);
       if(version.kind!=='image'||version.id!==slot.outputVersionId||version.assetId!==slot.outputAssetId)invalid('Output must use preallocated image IDs');
       if(this.db.prepare('SELECT trashed_at FROM assets WHERE id=?').get(version.assetId)?.trashed_at)invalid('Output is trashed');
-      this.db.prepare("UPDATE image_slots SET status='succeeded',result_version_id=?,actual_width=?,actual_height=?,progress=100,error=NULL WHERE run_id=? AND slot_index=?").run(version.id,version.width,version.height,runId,slotIndex);
+      const request=this.get(projectId,runId).request;
+      const warning=[slot.warning,version.width!==request.width||version.height!==request.height?'DIMENSIONS_DIFFER':null].filter(Boolean).join(';')||null;
+      this.db.prepare("UPDATE image_slots SET status='succeeded',result_version_id=?,actual_width=?,actual_height=?,progress=100,error=NULL,warning=? WHERE run_id=? AND slot_index=?").run(version.id,version.width,version.height,warning,runId,slotIndex);
       this.db.prepare("INSERT INTO asset_references VALUES (?,?,?,'run',1) ON CONFLICT(project_id,version_id,owner_id) DO UPDATE SET active=1").run(projectId,version.id,runId);this.refresh(runId);return this.slot(runId,slotIndex);
     });
   }

@@ -59,7 +59,8 @@ it('rejects foreign or trashed input assets and snapshots text versions',async()
   db.prepare('UPDATE assets SET trashed_at=? WHERE id=?').run('now',a.assetId);
   expect(()=>s.repo.prepare(s.target)).toThrow();
   const foreign=s.projects.create('other');
-  db.prepare('UPDATE canvases SET document=? WHERE id=?').run(JSON.stringify({...document,nodes:document.nodes.map(n=>n.id==='input'?{...n,assetVersionId:'00000000-0000-4000-8000-000000000000'}:n)}),document.id);
+  const foreignAsset=assets.importText({projectId:foreign.id,text:'real foreign input'});
+  db.prepare('UPDATE canvases SET document=? WHERE id=?').run(JSON.stringify({...document,nodes:document.nodes.map(n=>n.id==='input'?{...n,assetVersionId:foreignAsset.id}:n)}),document.id);
   expect(()=>s.repo.prepare(s.target)).toThrow(); expect(()=>s.repo.get(foreign.id,run.id)).toThrow();
 });
 it('recovers interrupted submit as unknown, preserves known IDs and stops only queued slots',()=>{

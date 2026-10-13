@@ -23,7 +23,9 @@ export class GrsaiClient implements ImageProviderPort {
   }
   async get(id: string): Promise<ImageTask> {
     if (!remoteId.safeParse(id).success) throw new GrsaiError('INVALID_REMOTE_ID');
-    return this.request(`/v1/api/result?id=${encodeURIComponent(id)}`, { method: 'GET' });
+    const result=await this.request(`/v1/api/result?id=${encodeURIComponent(id)}`, { method: 'GET' });
+    if(result.id!==id)throw new GrsaiError('RESULT_ID_MISMATCH');
+    return result;
   }
   private async request(path: string, init: RequestInit): Promise<ImageTask> {
     let response: Response;

@@ -11,6 +11,7 @@ import { parseRequest, requestSchemas, type AssetImportResult } from '../../../.
 import { assetScheme } from './assetProtocol';
 import { assertNativeDialogAllowed } from './nativeDialogPolicy';
 import { runGrsaiVerification } from './grsaiVerification';
+import { ImageGenerationCoordinator } from './imageGeneration';
 const verification = process.argv.includes('--verify-grsai');
 const nativeOpenDialog = dialog.showOpenDialog;
 protocol.registerSchemesAsPrivileged([assetScheme]);
@@ -20,7 +21,11 @@ if (isolated) {
   if (!isAbsolute(isolated) || !resolve(isolated).startsWith(`${root}/commercecanvas-e2e-`)) throw new Error('INVALID_TEST_DIRECTORY');
   app.setPath('userData', isolated);
 }
+// The profile is selected before acquiring ownership. Verification CLI never runs the executor.
+const ownsExecutor = verification || app.requestSingleInstanceLock();
+if (!ownsExecutor) app.exit(0);
 let runtime: RuntimeClient;
+let generations: ImageGenerationCoordinator | undefined;
 let window: BrowserWindow | null = null;
 let currentProject: string | null = null;
 let closing: Promise<void> | undefined;
@@ -48,6 +53,7 @@ function closeSafely() {
     try {
       await flushRenderer();
       if (quitRequested) {
+        await generations?.shutdown();
         await runtime.request('shutdown');
         quitting = true;
       }
@@ -69,6 +75,7 @@ function createWindow() {
   void window.loadURL(rendererUrl);
 }
 void app.whenReady().then(async () => {
+  if (!ownsExecutor) return;
   if ((isolated || verification) && process.platform === 'darwin') { app.dock?.hide(); app.setActivationPolicy('prohibited'); }
   if (verification) {
     const index = process.argv.indexOf('--verification-dir');
@@ -83,6 +90,8 @@ void app.whenReady().then(async () => {
   runtime = new RuntimeClient(child);
   const credentials = new CredentialStore(app.getPath('userData'), safeStorage);
   await runtime.request('setCredentialMetadata', { credentials: credentials.list() });
+  generations = new ImageGenerationCoordinator(runtime, credentials);
+  await generations.start(ownsExecutor);
   currentProject = await runtime.request('getCurrentProject');
   ipcMain.on('commerce:flush-result', (event, result: unknown) => {
     if (!window) return;
@@ -95,6 +104,13 @@ void app.whenReady().then(async () => {
     if (!window) throw new Error('UNTRUSTED_SENDER');
     validateSender(event, window.webContents, rendererUrl);
     parseRequest(method, payload);
+    if (method === 'prepareImageGeneration') return generations!.prepare(payload);
+    if (method === 'confirmImageGeneration') return generations!.confirm(payload);
+    if (method === 'listImageGenerations') return generations!.list(payload);
+    if (method === 'stopImageGeneration') return generations!.stop(payload);
+    if (method === 'resumeImageGeneration') return generations!.resume(payload);
+    if (method === 'bindImageGenerationTask') return generations!.bind(payload);
+    if (method === 'adaptImageGenerationOutput') return generations!.adapt(payload);
     if (method === 'storeCredential') {
       const p = requestSchemas.storeCredential.parse(payload);
       const metadata = credentials.store(p.service, p.secret);

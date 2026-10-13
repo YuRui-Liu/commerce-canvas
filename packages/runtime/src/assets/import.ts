@@ -42,7 +42,7 @@ export class AssetService {
     try { writeFileSync(temporary, bytes, { flag: 'wx', mode: 0o600 }); renameSync(temporary, target); }
     finally { rmSync(temporary, { force: true }); }
   }
-  async importImage(input: { projectId: string; bytes: Uint8Array; fileName: string }): Promise<AssetVersion> {
+  async importImage(input: { projectId: string; bytes: Uint8Array; fileName: string }, allocated?:{assetId:string;versionId:string}): Promise<AssetVersion> {
     this.repository.requireProject(input.projectId);
     if (input.bytes.byteLength === 0 || input.bytes.byteLength > 50 * 1024 * 1024) throw new DomainError('INVALID_IMAGE', 'Image must be between 1 byte and 50 MB');
     const bytes = Buffer.from(input.bytes);
@@ -56,10 +56,17 @@ export class AssetService {
     this.repository.requireProject(input.projectId);
     const hash = hashBytes(bytes), orientation = metadata.orientation ?? 1;
     const swap = orientation >= 5 && orientation <= 8;
-    const version: AssetVersion = { id: randomUUID(), assetId: randomUUID(), projectId: input.projectId, kind: 'image', hash, mime, relativePath: `assets/originals/${hash}`, text: null, width: swap ? metadata.height : metadata.width, height: swap ? metadata.width : metadata.height, createdAt: new Date().toISOString() };
+    const version: AssetVersion = { id: allocated?.versionId??randomUUID(), assetId: allocated?.assetId??randomUUID(), projectId: input.projectId, kind: 'image', hash, mime, relativePath: `assets/originals/${hash}`, text: null, width: swap ? metadata.height : metadata.width, height: swap ? metadata.width : metadata.height, createdAt: new Date().toISOString() };
     // Commit managed bytes before the SQLite reference. A failed insert can leave only an orphan,
     // which delayed cleanup handles; it must never remove content shared with another version.
     this.store(hash, 'original', bytes);
+    if(allocated){
+      const exists=this.repository.db.prepare('SELECT id FROM asset_versions WHERE id=?').get(allocated.versionId);
+      if(exists){const existing=this.repository.get(allocated.versionId,input.projectId);
+        if(existing.assetId!==allocated.assetId||existing.hash!==hash||existing.kind!=='image')throw new DomainError('OUTPUT_CONFLICT','Allocated output has different content');
+        return existing;
+      }
+    }
     const result = this.repository.insert(version, input.fileName, { orientation, originalWidth: metadata.width, originalHeight: metadata.height });
     this.thumbnails.enqueue(hash, () => readFileSync(this.path(hash, 'original')), thumbnail => this.store(hash, 'thumbnail', thumbnail));
     return result;

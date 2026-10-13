@@ -26,3 +26,5 @@ export interface ResolvedGenerationSettings {model:GenerationSettings['model'];q
 export type GenerationStatus='queued'|'submitting'|'running'|'downloading'|'succeeded'|'failed'|'unknown'|'cancelled';
 export interface GenerationSlot {runId:string;slotIndex:number;attemptId:string;outputAssetId:string;outputVersionId:string;remoteId:string|null;status:GenerationStatus;error:string|null;progress:number|null;actualWidth:number|null;actualHeight:number|null;resultVersionId:string|null}
 export interface GenerationRun {id:string;projectId:string;canvasId:string;nodeId:string;settings:GenerationSettings;inputs:GenerationBinding[];facts:Record<string,string>;request:ResolvedGenerationSettings & {prompt:string};contextHash:string;approvedAt:string|null;status:GenerationStatus;stopRequested:boolean;createdAt:string;updatedAt:string;slots:GenerationSlot[]}
+export interface GenerationDerivative {versionId:string;sourceVersionId:string;fit:'contain'|'cover';background:string;width:number;height:number}
+export interface GenerationSlot {warning:string|null;derivatives:GenerationDerivative[]}
