@@ -12,6 +12,7 @@ import { assetScheme } from './assetProtocol';
 import { assertNativeDialogAllowed } from './nativeDialogPolicy';
 import { runGrsaiVerification } from './grsaiVerification';
 import { ImageGenerationCoordinator } from './imageGeneration';
+import {createImageGenerationFixture} from './imageGenerationFixture';
 const verification = process.argv.includes('--verify-grsai');
 const nativeOpenDialog = dialog.showOpenDialog;
 protocol.registerSchemesAsPrivileged([assetScheme]);
@@ -21,6 +22,7 @@ if (isolated) {
   if (!isAbsolute(isolated) || !resolve(isolated).startsWith(`${root}/commercecanvas-e2e-`)) throw new Error('INVALID_TEST_DIRECTORY');
   app.setPath('userData', isolated);
 }
+if(process.env.COMMERCECANVAS_GENERATION_FIXTURE&&!isolated)throw Error('TEST_PROFILE_REQUIRED');
 // The profile is selected before acquiring ownership. Verification CLI never runs the executor.
 const ownsExecutor = verification || app.requestSingleInstanceLock();
 if (!ownsExecutor) app.exit(0);
@@ -90,7 +92,9 @@ void app.whenReady().then(async () => {
   runtime = new RuntimeClient(child);
   const credentials = new CredentialStore(app.getPath('userData'), safeStorage);
   await runtime.request('setCredentialMetadata', { credentials: credentials.list() });
-  generations = new ImageGenerationCoordinator(runtime, credentials);
+  const fixture=isolated&&process.env.COMMERCECANVAS_GENERATION_FIXTURE==='1'?createImageGenerationFixture():undefined;
+  if(fixture)Object.defineProperty(globalThis,'commerceCanvasGenerationFixture',{value:fixture.state,configurable:true});
+  generations = new ImageGenerationCoordinator(runtime,fixture?.credentials??credentials,fixture?.options);
   await generations.start(ownsExecutor);
   currentProject = await runtime.request('getCurrentProject');
   ipcMain.on('commerce:flush-result', (event, result: unknown) => {
@@ -106,7 +110,11 @@ void app.whenReady().then(async () => {
     parseRequest(method, payload);
     if (method === 'prepareImageGeneration') return generations!.prepare(payload);
     if (method === 'confirmImageGeneration') return generations!.confirm(payload);
-    if (method === 'listImageGenerations') return generations!.list(payload);
+    if (method === 'listImageGenerations') {
+      const result=await generations!.list(payload);
+      if(fixture){fixture.state.lists++;if(fixture.state.listDelayMs)await new Promise(resolve=>setTimeout(resolve,fixture.state.listDelayMs));}
+      return result;
+    }
     if (method === 'stopImageGeneration') return generations!.stop(payload);
     if (method === 'resumeImageGeneration') return generations!.resume(payload);
     if (method === 'bindImageGenerationTask') return generations!.bind(payload);

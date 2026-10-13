@@ -35,6 +35,8 @@ it('adapts contain/cover to requested pixels with stable provenance and preserve
  expect(runtime.assets.repository.get(original.id,s.project.id).hash).toBe(original.hash);
  expect(runtime.assets.repository.list(s.project.id)).toHaveLength(3);
  expect(runtime.generationResults.provenance(contain.id,s.project.id)).toMatchObject({sourceVersionId:original.id,fit:'contain',background:'#ffffff',width:1024,height:1024});
+ const loaded=runtime.canvases.load(s.project.id,s.canvas.document.id);
+ expect(()=>runtime.canvases.save(s.project.id,{...loaded.document,nodes:[...loaded.document.nodes,{id:'derived',kind:'output',runId:s.run.id,assetVersionId:contain.id,position:{x:400,y:0}}]},loaded.panel,loaded.document.revision)).not.toThrow();
 });
 it('guards projects and finishes safely after the source node is deleted',async()=>{
  const s=await setup(),foreign=runtime.projects.create('foreign');

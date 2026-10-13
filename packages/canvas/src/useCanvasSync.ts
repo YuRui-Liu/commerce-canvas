@@ -84,5 +84,6 @@ export function useCanvasSync(bridge: DesktopBridge) {
     const created = await bridge.createCanvas({ projectId, name: `画布 ${list.length + 1}` });
     await loadProject(projectId, created.document.id);
   }, [bridge, flush, list.length, loadProject]);
-  return { record, list, epoch, status, savedMessages, failed: !!queue.current?.error, conflict: String(queue.current?.error).includes('REVISION_CONFLICT'), edit, editPanel, flush, retry, prepareProject, installProject, loadProject, reload, copy, create };
+  const getRecord=useCallback(()=>queue.current?.value,[]);
+  return { record, getRecord, list, epoch, status, savedMessages, failed: !!queue.current?.error, conflict: String(queue.current?.error).includes('REVISION_CONFLICT'), edit, editPanel, flush, retry, prepareProject, installProject, loadProject, reload, copy, create };
 }

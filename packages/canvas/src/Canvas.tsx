@@ -1,4 +1,4 @@
-import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ReactFlow, Background, Controls, Handle, Position, type Node, type NodeProps, type ReactFlowInstance, type Connection } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import type { CanvasDocument, CanvasNode } from '../../contracts/src/canvas';
@@ -9,6 +9,8 @@ import './canvas.css';
 import {changeEdgeRole,replaceNodeVersion} from './assetEditing';
 import {droppedInput,pastedInput,type AssetInput} from './AssetDropZone';
 import {isEditing} from './inputBindings';
+import {ImageGenerationNode} from './nodes/ImageGenerationNode';
+import {defaultGenerationSettings,type GenerationSettings} from '../../contracts/src/imageGeneration';
 const roleNames:Record<InputRole,string>={product:'商品',scene:'场景',style:'风格',facts:'资料',instruction:'指令',copy:'文案'};
 type NodeData={node:CanvasNode;asset?:AssetVersion;view:(a:AssetVersion)=>void};
 type AssetBatch={items:AssetVersion[];position:{x:number;y:number};index:number;before?:CanvasDocument};
@@ -16,21 +18,26 @@ const Card=memo(function Card({data}:NodeProps<Node<NodeData>>){
   const {node,asset,view}=data;
   if(node.kind==='group')return <div className="graph-group-label">素材分组</div>;
   return <article className="graph-card">
-    <header>{node.kind==='agent'?'Agent':node.kind==='output'?'输出':asset?.kind==='text'?'文本素材':'图片素材'}<small>{node.stale?'需要更新':node.kind==='agent'?'未配置':node.kind==='output'?'尚无产物':'本地引用'}</small></header>
+    <header>{node.kind==='agent'?'Agent':node.kind==='output'?'输出':asset?.kind==='text'?'文本素材':'图片素材'}<small>{node.stale?'需要更新':node.kind==='agent'?'未配置':node.kind==='output'?(asset?'已归档':'尚无产物'):'本地引用'}</small></header>
     {asset?.kind==='image'?<button className="nodrag nowheel graph-preview" onClick={()=>view(asset)} aria-label="查看原始素材"><img loading="lazy" src={`commerce-asset://asset/${asset.id}/thumbnail`} alt="商品素材"/></button>:asset?.kind==='text'?<button className="nodrag nowheel graph-text" onClick={()=>view(asset)}>{asset.text?.slice(0,200)}</button>:<p>{node.kind==='agent'?'连接输入素材，配置能力后再运行。':node.kind==='output'?'运行结果将以资产引用展示。':'素材不可用，请检查当前项目。'}</p>}
     <div className="graph-inputs">{InputRoleSchema.options.map(role=><div key={role}><Handle type="target" position={Position.Left} id={role} aria-label={`${roleNames[role]}输入`}/><span>{roleNames[role]}</span></div>)}</div>
     <Handle type="source" position={Position.Right} id="output" aria-label="输出连接"/>
   </article>;
 });
-const nodeTypes={asset:Card,text:Card,agent:Card,output:Card,group:Card};
-export type CanvasHandle={addAssets:(assets:AssetVersion[],position?:{x:number;y:number})=>void;getDocument:()=>CanvasDocument;replaceVersion:(nodeId:string,versionId:string)=>void;setEdgeRole:(edgeId:string,role:InputRole)=>void;clearSelection:()=>void;flushPending:()=>Promise<void>;cancelPending:()=>void};
+const nodeTypes={asset:Card,text:Card,agent:Card,output:Card,group:Card,generation:ImageGenerationNode};
+export type CanvasHandle={addAssets:(assets:AssetVersion[],position?:{x:number;y:number})=>void;getDocument:()=>CanvasDocument;replaceVersion:(nodeId:string,versionId:string)=>void;setEdgeRole:(edgeId:string,role:InputRole)=>void;clearSelection:()=>void;flushPending:()=>Promise<void>;cancelPending:()=>void;setGeneration:(id:string,value:GenerationSettings)=>void;applyDocument:(document:CanvasDocument,publish?:boolean)=>boolean};
 // document is the initial document for this mount. Use a load epoch/key for explicit
 // replacement; revisions emitted by onChange must not remount/reset gesture history.
-export type CanvasProps={document:CanvasDocument;initialSelection?:string[];disabled?:boolean;assets:AssetVersion[];onChange:(doc:CanvasDocument)=>void;onView:(asset:AssetVersion)=>void;onSelectionChange?:(ids:string[])=>void;onAssetInput?:(input:AssetInput,position:{x:number;y:number})=>void};
-export const Canvas=forwardRef<CanvasHandle,CanvasProps>(function Canvas({document,initialSelection=[],disabled=false,assets,onChange,onView,onSelectionChange,onAssetInput},ref){
+export type CanvasProps={document:CanvasDocument;initialSelection?:string[];disabled?:boolean;assets:AssetVersion[];onChange:(doc:CanvasDocument)=>void;onView:(asset:AssetVersion)=>void;onSelectionChange?:(ids:string[])=>void;onAssetInput?:(input:AssetInput,position:{x:number;y:number})=>void;renderGeneration?:(node:CanvasNode)=>ReactNode;generationStatus?:(id:string)=>string};
+export const Canvas=forwardRef<CanvasHandle,CanvasProps>(function Canvas({document,initialSelection=[],disabled=false,assets,onChange,onView,onSelectionChange,onAssetInput,renderGeneration,generationStatus},ref){
   const [history,setHistory]=useState(()=>createHistory(document));const current=useRef(document);const hist=useRef(history);hist.current=history;
   const [selection,setSelection]=useState<string[]>(initialSelection);const [message,setMessage]=useState('');const [snap,setSnap]=useState(true);
   const [edgeSelection,setEdgeSelection]=useState<string[]>([]);
+  // React Flow clears internal measurements when a new controlled node lacks
+  // `measured`. Keep this view-only cache across polling/config rerenders;
+  // dimensions must never enter persisted documents or undo history.
+  const measurements=useRef(new Map<string,{width:number;height:number}>());
+  const [measurementRevision,setMeasurementRevision]=useState(0);
   const flow=useRef<ReactFlowInstance<Node<NodeData>>|null>(null);const dragStart=useRef<CanvasDocument|null>(null);
   const batches=useRef<AssetBatch[]>([]);
   const batchFrame=useRef<number|null>(null);
@@ -91,6 +98,11 @@ export const Canvas=forwardRef<CanvasHandle,CanvasProps>(function Canvas({docume
   },[advanceBatch]);
   useImperativeHandle(ref,()=>({
     addAssets,getDocument:()=>batches.current[0]?.before??current.current,
+    setGeneration:(id,value)=>{if(!disabledRef.current)update({...current.current,nodes:current.current.nodes.map(n=>n.id===id?{...n,generation:value}:n)});},
+    applyDocument:(next,publish=true)=>{
+      if(addingRef.current||dragStart.current||!mounted.current||next.id!==current.current.id)return false;
+      current.current=next;setHistory(h=>commit(h,next));if(publish)changeCallback.current(next);return true;
+    },
     replaceVersion:(id,versionId)=>update(replaceNodeVersion(current.current,id,versionId)),
     setEdgeRole:(id,role)=>update(changeEdgeRole(current.current,id,role)),
     clearSelection:()=>{setSelection([]);setEdgeSelection([]);onSelectionChange?.([]);},
@@ -113,7 +125,7 @@ export const Canvas=forwardRef<CanvasHandle,CanvasProps>(function Canvas({docume
   }),[addAssets,update,onSelectionChange]);
   const data=history.present;
   const assetMap=useMemo(()=>new Map(assets.map(a=>[a.id,a])),[assets]);
-  const nodes=useMemo(()=>data.nodes.map(n=>({id:n.id,type:n.kind,position:n.position,parentId:n.parentId,selected:selection.includes(n.id),style:n.kind==='group'?{width:n.width,height:n.height}:undefined,data:{node:n,asset:n.assetVersionId?assetMap.get(n.assetVersionId):undefined,view:onView}})),[data.nodes,selection,assetMap,onView]);
+  const nodes=useMemo(()=>data.nodes.map(n=>({id:n.id,type:n.kind,position:n.position,parentId:n.parentId,selected:selection.includes(n.id),measured:measurements.current.get(n.id),style:n.kind==='group'?{width:n.width,height:n.height}:undefined,data:{node:n,asset:n.assetVersionId?assetMap.get(n.assetVersionId):undefined,view:onView,renderGeneration,generationStatus:generationStatus?.(n.id),inputs:data.edges.filter(e=>e.target===n.id).map(e=>({role:e.role,asset:assetMap.get(data.nodes.find(source=>source.id===e.source)?.assetVersionId??'')}))}})),[data.nodes,data.edges,selection,assetMap,onView,renderGeneration,generationStatus,measurementRevision]);
   const edges=useMemo(()=>data.edges.map(e=>({...e,selected:edgeSelection.includes(e.id),targetHandle:e.role,sourceHandle:'output',label:roleNames[e.role]})),[data.edges,edgeSelection]);
   const selectionChanged=useCallback(({nodes:chosen}:{nodes:Node[]})=>{onSelectionChange?.(chosen.map(n=>n.id));},[onSelectionChange]);
   const connect=useCallback((c:Connection)=>{if(addingRef.current||disabledRef.current)return;const role=InputRoleSchema.safeParse(c.targetHandle);if(!role.success||!canConnect(current.current,c.source,c.target,role.data)){setMessage('无法连接：检查循环、输入角色是否已占用。');return;}update({...current.current,edges:[...current.current.edges,{id:crypto.randomUUID(),source:c.source,target:c.target,role:role.data}]});setMessage('已连接');},[update]);
@@ -141,6 +153,11 @@ export const Canvas=forwardRef<CanvasHandle,CanvasProps>(function Canvas({docume
       <button disabled={adding||!data.nodes.length} onClick={()=>update(layout(current.current))}>自动布局</button>
       <button aria-pressed={snap} onClick={()=>setSnap(!snap)}>吸附</button>
       <button disabled={adding} onClick={()=>update({...current.current,nodes:[...current.current.nodes,{id:crypto.randomUUID(),kind:'agent',position:flow.current?.screenToFlowPosition({x:innerWidth/2,y:innerHeight/2})??{x:0,y:0}}]})}>添加 Agent</button>
+      <button disabled={adding} onClick={()=>{
+        const id=crypto.randomUUID(),center=flow.current?.screenToFlowPosition({x:innerWidth/2,y:innerHeight/2})??{x:0,y:0};
+        update({...current.current,nodes:[...current.current.nodes,{id,kind:'generation',generation:defaultGenerationSettings(),position:{x:center.x-180,y:center.y-270}}]});
+        setSelection([id]);onSelectionChange?.([id]);
+      }}>添加出图节点</button>
     </div>
     <ReactFlow<Node<NodeData>> nodes={nodes} edges={edges} nodeTypes={nodeTypes} onInit={instance=>{flow.current=instance;}} defaultViewport={document.viewport}
       minZoom={.1} maxZoom={4} selectionOnDrag multiSelectionKeyCode="Shift" panOnDrag={[1,2]} panActivationKeyCode="Space" panOnScroll zoomOnPinch snapToGrid={snap} snapGrid={[16,16]} deleteKeyCode={null} onlyRenderVisibleElements
@@ -149,6 +166,9 @@ export const Canvas=forwardRef<CanvasHandle,CanvasProps>(function Canvas({docume
       onSelectionChange={selectionChanged}
       onEdgesChange={changes=>{const selected=changes.filter(change=>change.type==='select');if(selected.length)setEdgeSelection(previous=>{const ids=new Set(previous);for(const change of selected){if(change.selected)ids.add(change.id);else ids.delete(change.id);}return [...ids];});}}
       onNodesChange={changes=>{
+        let resized=false;
+        for(const change of changes){if(change.type!=='dimensions'||!change.dimensions)continue;const old=measurements.current.get(change.id);if(old?.width!==change.dimensions.width||old?.height!==change.dimensions.height){measurements.current.set(change.id,change.dimensions);resized=true;}}
+        if(resized)setMeasurementRevision(value=>value+1);
         if(disabledRef.current)return;
         const selected=changes.filter(c=>c.type==='select');
         if(selected.length)setSelection(previous=>{const ids=new Set(previous);for(const change of selected){if(change.selected)ids.add(change.id);else ids.delete(change.id);}return [...ids];});

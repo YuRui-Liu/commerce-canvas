@@ -51,7 +51,7 @@ export class CanvasRepository {
         if(node.runId){
           const run=this.db.prepare('SELECT canvas_id,node_id FROM image_runs WHERE id=? AND project_id=?').get(node.runId,projectId);
           if(!run||run.canvas_id!==document.id||(node.kind!=='output'&&(node.kind!=='generation'||run.node_id!==node.id)))throw new DomainError('INVALID_REFERENCE','Run must belong to this canvas and generation node');
-          if(node.kind==='output'&&node.assetVersionId&&!this.db.prepare('SELECT 1 FROM image_slots WHERE run_id=? AND result_version_id=?').get(node.runId,node.assetVersionId))throw new DomainError('INVALID_REFERENCE','Output version must belong to run');
+          if(node.kind==='output'&&node.assetVersionId&&!this.db.prepare('SELECT 1 FROM generation_outputs WHERE run_id=? AND version_id=? AND project_id=?').get(node.runId,node.assetVersionId,projectId))throw new DomainError('INVALID_REFERENCE','Output version must belong to run');
         }
       }
       for (const id of versions) {

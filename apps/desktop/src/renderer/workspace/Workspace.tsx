@@ -21,6 +21,11 @@ import { emptyPanel, type PanelState } from '../../../../../packages/contracts/s
 import { useCanvasSync } from '../../../../../packages/canvas/src/useCanvasSync';
 import { recordRequirement } from './panelState';
 import type {AssetImportResult} from '../../../../../packages/contracts/src/bridge';
+import {defaultGenerationSettings} from '../../../../../packages/contracts/src/imageGeneration';
+import {GenerationControls} from '../generation/GenerationControls';
+import {GenerationInspector} from '../generation/GenerationInspector';
+import {GenerationReview} from '../generation/GenerationReview';
+import {useGenerationRuns,runLabel} from '../generation/useGenerationRuns';
 const bridge = window.commerceCanvas;
 export function Workspace() {
   const canvas=useRef<CanvasHandle>(null);
@@ -44,12 +49,14 @@ export function Workspace() {
   const [notice, setNotice] = useState('');
   const [view, setView] = useState<AssetVersion | null>(null);
   const [comparison,setComparison]=useState<AssetVersion[]>([]);
+  const [generationHistory,setGenerationHistory]=useState(false);
   const graph = sync.record?.document;
   const panel = sync.record?.panel ?? emptyPanel();
   const selection = panel.selectedIds;
   const textDrafts = panel.inspectorDrafts;
   const editPanel = useCallback((update: (panel: PanelState) => PanelState) => { if (!lock.current) sync.editPanel(update); }, [sync.editPanel]);
   const setSelection = useCallback((selectedIds: string[]) => editPanel(previous => JSON.stringify(previous.selectedIds) === JSON.stringify(selectedIds) ? previous : ({ ...previous, selectedIds, activeTab: selectedIds.length ? 'config' : previous.activeTab })), [editPanel]);
+  const onCanvasSelection=useCallback((ids:string[])=>{setGenerationHistory(false);setSelection(ids);},[setSelection]);
   const setGraph = useCallback((document: CanvasDocument) => sync.edit({ document }), [sync.edit]);
   const [importResults,setImportResults]=useState<AssetImportResult[]>([]);
   const { error: themeError } = useTheme();
@@ -292,6 +299,9 @@ export function Workspace() {
       setStatus('资料已另存为新项目；素材仍在原项目。');
     });
   }
+  const generation=useGenerationRuns({projectId:project?.id,canvasId:graph?.id,canvas,sync,blocked:busy,setAssets,saveProduct:save});
+  const generationSelected=selectedNode?.kind==='generation';
+  const generationRuns=generationHistory?generation.runs:generation.runs.filter(r=>r.nodeId===selectedNode?.id||r.id===selectedNode?.runId);
   return <div className="app-shell">
     <header className="topbar">
       <div className="brand">
@@ -302,6 +312,7 @@ export function Workspace() {
       <ProjectSwitcher projects={projects} current={project} disabled={busy} onSelect={switchProject} onCreate={() => open('create')} onRename={() => open('rename')} />
       <div className="top-spacer" />
       <ThemeChoices />
+      <Button variant="quiet" disabled={!project||busy} onClick={()=>{setGenerationHistory(true);setRight(true);}}>生成历史</Button>
       <Button variant="quiet" onClick={() => open('settings')}>设置</Button>
     </header>
     <div className={`workspace-grid ${library ? '' : 'library-closed'} ${right ? '' : 'right-closed'}`}>
@@ -329,8 +340,10 @@ export function Workspace() {
       <CanvasRegion ref={canvas} project={project} record={sync.record} canvases={sync.list} epoch={sync.epoch}
         selectCanvas={id => void perform(async () => { canvas.current?.cancelPending(); await sync.loadProject(project!.id, id); })}
         createCanvas={() => void perform(async () => { canvas.current?.cancelPending(); await sync.create(project!.id); })}
-        assets={assets} onView={setView} right={right} busy={busy} toggleRight={() => setRight(!right)} upload={() => void importImages()} addText={() => open('text')} create={() => open('create')} onAssetInput={(input,position)=>void receiveAsset(input,position)} onDocumentChange={setGraph} onSelectionChange={setSelection}/>
-      {right && (selectedNode&&graph&&panel.activeTab!=='chat'?<AssetInspector node={selectedNode} asset={selectedAsset} document={graph} draft={textDrafts[draftKey]??selectedAsset?.text??''}
+        assets={assets} onView={setView} right={right} busy={busy} toggleRight={() => setRight(!right)} upload={() => void importImages()} addText={() => open('text')} create={() => open('create')} onAssetInput={(input,position)=>void receiveAsset(input,position)} onDocumentChange={setGraph} onSelectionChange={onCanvasSelection}
+        renderGeneration={node=><GenerationControls value={node.generation??defaultGenerationSettings()} onChange={value=>canvas.current?.setGeneration(node.id,value)} onGenerate={()=>void generation.prepare(node.id)} busy={busy||generation.pending}/>}
+        generationStatus={id=>runLabel(generation.runs.find(r=>r.id===graph?.nodes.find(n=>n.id===id)?.runId))}/>
+      {right && ((generationSelected||generationHistory)?<GenerationInspector key={generationHistory?'all':selectedNode?.id} node={generationHistory?undefined:selectedNode} runs={generationRuns} busy={busy||generation.pending} error={generation.error} onChange={value=>{if(selectedNode)canvas.current?.setGeneration(selectedNode.id,value);}} onGenerate={()=>{if(selectedNode)void generation.prepare(selectedNode.id);}} onClose={()=>{setGenerationHistory(false);canvas.current?.clearSelection();}} onAct={(...args)=>void generation.act(...args)} onAdapt={(...args)=>void generation.adapt(...args)}/>:selectedNode&&graph&&panel.activeTab!=='chat'?<AssetInspector node={selectedNode} asset={selectedAsset} document={graph} draft={textDrafts[draftKey]??selectedAsset?.text??''}
         onDraft={text=>editPanel(p=>({...p,inspectorDrafts:{...p.inspectorDrafts,[draftKey]:text}}))}
         onSave={()=>void saveNodeText()} onRole={(id,role)=>{if(!lock.current)canvas.current?.setEdgeRole(id,role);}} onChat={()=>editPanel(p=>({...p,activeTab:'chat'}))}
         onClose={()=>{if(!lock.current)canvas.current?.clearSelection();}} onFacts={()=>{if(lock.current)return;canvas.current?.clearSelection();editPanel(p=>({...p,activeTab:'config'}));requestAnimationFrame(()=>document.querySelector<HTMLTextAreaElement>('.right-panel textarea')?.focus());}} busy={busy}/>
@@ -339,7 +352,7 @@ export function Workspace() {
           saveRequirement={()=>void perform(async()=>{if(graph){sync.editPanel(p=>recordRequirement(p,graph));await sync.flush();}})} settings={() => open('settings')} />)}
     </div>
     <footer className="statusbar">
-      <span role="status">{themeError || status}{project && !conflict ? ` · 修订 ${project.revision}` : ''}</span>
+      <span role="status">{themeError || (!generation.review&&generation.error) || status}{project && !conflict ? ` · 修订 ${project.revision}` : ''}</span>
       <span>{sync.status || '本地优先 · 自由创作'}</span>
     </footer>
     {sync.failed && <div className="conflict-banner" role="alert"><strong>画布保存失败或发生修订冲突</strong><span>当前草稿已保留；重新载入会舍弃本画布草稿，另存会保留为新画布。</span>{!sync.conflict&&<Button disabled={busy} onClick={()=>void perform(sync.retry)}>重试画布保存</Button>}<Button disabled={busy} onClick={()=>void perform(sync.reload)}>重新载入画布</Button><Button disabled={busy} onClick={()=>void perform(sync.copy)}>另存画布副本</Button></div>}
@@ -357,6 +370,7 @@ export function Workspace() {
       <Button onClick={() => setNotice('')}>知道了</Button>
     </Dialog>}
     {modal === 'settings' && <SettingsPanel onClose={() => setModal(null)} />}
+    {generation.review&&<GenerationReview run={generation.review} pending={generation.pending} error={generation.error} onConfirm={()=>void generation.confirm()} onCancel={()=>void generation.cancel()} onSettings={()=>open('settings')}/>}
     {modal && modal !== 'settings' && <Dialog title={modal === 'create' ? '创建商品项目' : modal === 'rename' ? '重命名项目' : '添加文本素材'} onClose={() => {
       if (!busy)
         setModal(null);
