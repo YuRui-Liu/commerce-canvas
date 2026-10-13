@@ -10,6 +10,8 @@ import { validateSender } from './ipc';
 import { parseRequest, requestSchemas, type AssetImportResult } from '../../../../packages/contracts/src/bridge';
 import { assetScheme } from './assetProtocol';
 import { assertNativeDialogAllowed } from './nativeDialogPolicy';
+import { runGrsaiVerification } from './grsaiVerification';
+const verification = process.argv.includes('--verify-grsai');
 const nativeOpenDialog = dialog.showOpenDialog;
 protocol.registerSchemesAsPrivileged([assetScheme]);
 const isolated = process.env.COMMERCECANVAS_TEST_USER_DATA;
@@ -28,7 +30,7 @@ let flushReply: { id: string; resolve: (ok: boolean) => void } | undefined;
 function reportError(title: string, message: string) {
   // Isolated tests must never open a native dialog or steal desktop focus.
   // Both arguments are fixed application copy / sanitized error codes only.
-  if (isolated) console.error(title, message);
+  if (isolated || verification) console.error(title, message);
   else dialog.showErrorBox(title, message);
 }
 async function flushRenderer() {
@@ -67,7 +69,16 @@ function createWindow() {
   void window.loadURL(rendererUrl);
 }
 void app.whenReady().then(async () => {
-  if (isolated && process.platform === 'darwin') { app.dock?.hide(); app.setActivationPolicy('prohibited'); }
+  if ((isolated || verification) && process.platform === 'darwin') { app.dock?.hide(); app.setActivationPolicy('prohibited'); }
+  if (verification) {
+    const index = process.argv.indexOf('--verification-dir');
+    const directory = index >= 0 ? process.argv[index + 1] : undefined;
+    if (!directory || !isAbsolute(directory) || isolated) throw new Error('INVALID_VERIFICATION_DIRECTORY');
+    const credentials = new CredentialStore(app.getPath('userData'), safeStorage);
+    try { console.log(JSON.stringify(await runGrsaiVerification(directory, credentials.resolveGrsai()))); app.exit(0); }
+    catch (error) { console.error(JSON.stringify({ status: 'failed', code: error instanceof Error && /^[A-Z_0-9]+$/.test(error.message) ? error.message : 'VERIFICATION_FAILED' })); app.exit(1); }
+    return;
+  }
   const child = utilityProcess.fork(join(__dirname, 'utility.js'), [app.getPath('userData')], { serviceName: 'CommerceCanvas Runtime' });
   runtime = new RuntimeClient(child);
   const credentials = new CredentialStore(app.getPath('userData'), safeStorage);

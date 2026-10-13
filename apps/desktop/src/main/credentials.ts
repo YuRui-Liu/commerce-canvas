@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { CredentialMetadataSchema, requestSchemas, type CredentialMetadata, type CredentialService } from '../../../../packages/contracts/src/bridge';
-interface SecureStorage { isEncryptionAvailable(): boolean; encryptString(secret: string): Buffer; getSelectedStorageBackend?(): string }
+interface SecureStorage { isEncryptionAvailable(): boolean; encryptString(secret: string): Buffer; decryptString?(secret: Buffer): string; getSelectedStorageBackend?(): string }
 const entriesSchema = z.array(CredentialMetadataSchema.extend({ ciphertext: z.string().min(1) }).strict()).max(100);
 export class CredentialStore {
   private readonly file: string;
@@ -15,6 +15,17 @@ export class CredentialStore {
     finally { rmSync(temp, { force: true }); }
   }
   list(): CredentialMetadata[] { return this.read().map(({ credentialId, service, maskedTail }) => ({ credentialId, service, maskedTail })); }
+  /** Main-process only. Never register this method on the renderer bridge. */
+  resolveGrsai(credentialId?: string): string {
+    if (!this.secure.isEncryptionAvailable() || this.secure.getSelectedStorageBackend?.() === 'basic_text' || !this.secure.decryptString) throw new Error('SECURE_STORAGE_UNAVAILABLE');
+    try {
+      const entry = this.read().find(item => item.service === 'grsai' && (!credentialId || item.credentialId === credentialId));
+      if (!entry) throw new Error('CREDENTIAL_NOT_FOUND');
+      const secret = this.secure.decryptString(Buffer.from(entry.ciphertext, 'base64'));
+      if (!requestSchemas.storeCredential.safeParse({ service: 'grsai', secret }).success) throw new Error('INVALID_CREDENTIAL');
+      return secret;
+    } catch (error) { if (error instanceof Error && error.message === 'CREDENTIAL_NOT_FOUND') throw error; throw new Error('CREDENTIAL_DECRYPT_FAILED'); }
+  }
   store(service: CredentialService, secret: string): CredentialMetadata {
     if (!requestSchemas.storeCredential.safeParse({ service, secret }).success) throw new Error('INVALID_REQUEST');
     if (!this.secure.isEncryptionAvailable() || this.secure.getSelectedStorageBackend?.() === 'basic_text') throw new Error('SECURE_STORAGE_UNAVAILABLE');
