@@ -20,7 +20,7 @@ export const CanvasDocumentSchema = z.object({
   for(const n of doc.nodes){const seen=new Set([n.id]);let p=n.parentId;while(p){if(seen.has(p)||nodes.get(p)?.kind!=='group'){issue('Invalid group hierarchy');break;}seen.add(p);p=nodes.get(p)?.parentId;}}
   for(const e of doc.edges){
     const input=`${e.target}\0${e.role}`;
-    if(edgeIds.has(e.id)||inputs.has(input)||e.source===e.target||!nodes.has(e.source)||!nodes.has(e.target)) issue('Invalid or duplicate edge/input');
+    if(edgeIds.has(e.id)||inputs.has(input)||e.source===e.target||!nodes.has(e.source)||!nodes.has(e.target)||nodes.get(e.source)?.kind==='group'||nodes.get(e.target)?.kind==='group') issue('Invalid or duplicate edge/input');
     edgeIds.add(e.id);inputs.add(input);adjacency.set(e.source,[...(adjacency.get(e.source)??[]),e.target]);
   }
   const degree=new Map([...nodes.keys()].map(id=>[id,0]));

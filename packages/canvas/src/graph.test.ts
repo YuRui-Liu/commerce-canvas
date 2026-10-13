@@ -46,6 +46,13 @@ describe('graph invariants', () => {
     expect(CanvasDocumentSchema.safeParse({...doc(),nodes:[{id:'g',kind:'group',position:{x:0,y:0},parentId:'g'}]}).success).toBe(false);
     expect(CanvasDocumentSchema.safeParse({...doc(),viewport:{x:0,y:0,zoom:0}}).success).toBe(false);
   });
+  it('rejects group endpoints in contracts as well as interactive connections',()=>{
+    const d=doc();d.nodes[0].kind='group';
+    expect(canConnect(d,'a','d','scene')).toBe(false);
+    expect(CanvasDocumentSchema.safeParse(d).success).toBe(false);
+    const target=doc();target.nodes[1].kind='group';
+    expect(CanvasDocumentSchema.safeParse(target).success).toBe(false);
+  });
 });
 describe('layout history',()=>{
   it('commits one drag gesture and restores deleted nodes with their edges',()=>{
