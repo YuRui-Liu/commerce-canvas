@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canConnect, descendants, groupNodes, ungroupNodes, layout } from './graph';
+import { canConnect, descendants, groupNodes, ungroupNodes, layout, alignLeft, absolutePosition } from './graph';
 import { createHistory, commit, undo, redo } from './history';
 import type { CanvasDocument } from '../../contracts/src/canvas';
 import { CanvasDocumentSchema } from '../../contracts/src/canvas';
@@ -26,6 +26,18 @@ describe('graph invariants', () => {
     const d=groupNodes(groupNodes(doc(),['a','b'],'inner'),['inner','c'],'outer');
     const result=ungroupNodes(d,['inner']);
     expect(result.nodes.find(n=>n.id==='a')!.parentId).toBe('outer');
+  });
+  it('aligns selected roots once when a group and its child are both selected',()=>{
+    const d:CanvasDocument={...doc(),edges:[],nodes:[
+      {id:'group',kind:'group',position:{x:100,y:20}},
+      {id:'child',kind:'agent',parentId:'group',position:{x:24,y:48}},
+      {id:'outside',kind:'agent',position:{x:0,y:200}},
+    ]};
+    const aligned=alignLeft(d,['group','child','outside']);
+    expect(aligned.nodes.find(n=>n.id==='group')!.position.x).toBe(0);
+    expect(aligned.nodes.find(n=>n.id==='child')!.position).toEqual({x:24,y:48});
+    expect(absolutePosition(aligned,aligned.nodes.find(n=>n.id==='child')!).x).toBe(24);
+    expect(aligned.nodes.find(n=>n.id==='outside')!.position.x).toBe(0);
   });
   it('lays out a DAG with sources left of targets',()=>{ const d=layout(doc()); for(const e of d.edges) expect(d.nodes.find(n=>n.id===e.source)!.position.x).toBeLessThan(d.nodes.find(n=>n.id===e.target)!.position.x); });
   it('validates graph hierarchy, duplicate roles and bounded viewport at the contract boundary',()=>{

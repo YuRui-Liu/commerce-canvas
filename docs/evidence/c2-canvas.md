@@ -29,3 +29,9 @@ The explicit fit action respects a minimum zoom of 0.1, so a very long 200-node 
 ## Boundaries
 
 This checkpoint keeps graph sessions per project in memory. Durable saving, external drag/paste, role inspector and provider execution belong to C4, C3 and later Agent tasks. This checkpoint does not claim packaged-app validation; the final integration packaging run remains necessary.
+
+## Spec-review repairs
+
+The mixed parent/child alignment regression first failed with child local x = -100 instead of 24. Alignment now moves selected roots only; descendants retain their local positions. The regression passed after repair.
+
+Real Electron first reproduced bare contenteditable deletion (two graph nodes became one while a nested editor span was focused). The shortcut guard now uses actual `isContentEditable`; bare and plaintext-only editable ancestors both retain the nodes under Delete. Edge-selection regression first failed because no edge became selected. Explicit controlled edge selection now enables keyboard and toolbar deletion, with undo restoring the connection while both endpoint nodes remain. The targeted suite now contains 10 passing canvas unit tests, and the extended real Electron graph flow passes.

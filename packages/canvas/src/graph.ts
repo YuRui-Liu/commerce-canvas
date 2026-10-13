@@ -12,6 +12,22 @@ export function canConnect(doc:CanvasDocument,source:string,target:string,role:I
 export function absolutePosition(doc:CanvasDocument,node:CanvasNode):{x:number;y:number}{
   const p={...node.position};let parent=node.parentId;const seen=new Set([node.id]);while(parent&&!seen.has(parent)){seen.add(parent);const n=doc.nodes.find(n=>n.id===parent);if(!n)break;p.x+=n.position.x;p.y+=n.position.y;parent=n.parentId;}return p;
 }
+export function alignLeft(doc:CanvasDocument,ids:string[]):CanvasDocument{
+  // Selected containers move as a unit. Descendants of any selected ancestor
+  // keep their local coordinates instead of receiving the same translation twice.
+  const selected=new Set(ids);
+  const byId=new Map(doc.nodes.map(node=>[node.id,node]));
+  const chosen=doc.nodes.filter(node=>{
+    if(!selected.has(node.id))return false;
+    let parentId=node.parentId;
+    while(parentId){if(selected.has(parentId))return false;parentId=byId.get(parentId)?.parentId;}
+    return true;
+  });
+  if(chosen.length<2)return doc;
+  const roots=new Set(chosen.map(node=>node.id));
+  const x=Math.min(...chosen.map(n=>absolutePosition(doc,n).x));
+  return {...doc,nodes:doc.nodes.map(n=>roots.has(n.id)?{...n,position:{...n.position,x:n.position.x+x-absolutePosition(doc,n).x}}:n)};
+}
 export function groupNodes(doc:CanvasDocument,ids:string[],id:string):CanvasDocument{
   const selected=doc.nodes.filter(n=>ids.includes(n.id)&&!n.parentId);if(selected.length<2)return doc;
   const x=Math.min(...selected.map(n=>n.position.x))-24,y=Math.min(...selected.map(n=>n.position.y))-48;

@@ -22,12 +22,23 @@ test('canvas graph drag history, connections, grouping and viewport survive UI c
     await page.screenshot({path:'apps/desktop/dist/c2-before-connect.png'});
     const source=page.locator('.react-flow__node-agent').nth(0).locator('.source');const target=page.locator('.react-flow__node-agent').nth(1).locator('[data-handleid="product"]');
     await source.click();await target.click();await expect(page.locator('.react-flow__edge')).toHaveCount(1);
+    await page.locator('.react-flow__edge-textbg').click();await expect(page.locator('.react-flow__edge.selected')).toHaveCount(1);
+    await page.locator('.react-flow__edge').focus();await page.keyboard.press('Delete');await expect(page.locator('.react-flow__edge')).toHaveCount(0);await expect(page.locator('.react-flow__node-agent')).toHaveCount(2);
+    await page.getByRole('button',{name:'撤销',exact:true}).click();await expect(page.locator('.react-flow__edge')).toHaveCount(1);
+    await page.locator('.react-flow__edge-textbg').click();await page.getByRole('button',{name:'删除所选',exact:true}).click();await expect(page.locator('.react-flow__edge')).toHaveCount(0);await expect(page.locator('.react-flow__node-agent')).toHaveCount(2);
+    await page.getByRole('button',{name:'撤销',exact:true}).click();await expect(page.locator('.react-flow__edge')).toHaveCount(1);
     const reverseSource=await page.locator('.react-flow__node-agent').nth(1).locator('.source').boundingBox();const reverseTarget=await page.locator('.react-flow__node-agent').nth(0).locator('[data-handleid="style"]').boundingBox();
     await page.mouse.move(reverseSource!.x+reverseSource!.width/2,reverseSource!.y+reverseSource!.height/2);await page.mouse.down();await page.mouse.move(reverseTarget!.x+reverseTarget!.width/2,reverseTarget!.y+reverseTarget!.height/2,{steps:10});await page.mouse.up();
     await expect(page.locator('.react-flow__edge')).toHaveCount(1);
     await page.locator('.react-flow__node-agent').nth(1).click({position:{x:80,y:20}});await page.keyboard.press('Delete');await expect(page.locator('.react-flow__node-agent')).toHaveCount(1);await expect(page.locator('.react-flow__edge')).toHaveCount(0);
     await page.getByRole('button',{name:'撤销',exact:true}).click();await expect(page.locator('.react-flow__node-agent')).toHaveCount(2);await expect(page.locator('.react-flow__edge')).toHaveCount(1);
     await page.getByLabel('商品名称',{exact:true}).fill('Delete保留节点');await page.keyboard.press('Delete');await expect(page.locator('.react-flow__node-agent')).toHaveCount(2);
+    for(const editable of ['', 'plaintext-only']){
+      await page.locator('.react-flow__node-agent').nth(0).click({position:{x:80,y:20}});
+      await page.evaluate(value=>{const editor=document.createElement('div');editor.setAttribute('contenteditable',value);editor.id='test-editable';editor.style.cssText='position:absolute;top:100px;left:10px;z-index:100';editor.innerHTML='<span tabindex="0">保留节点</span>';document.querySelector('.graph-workspace')!.append(editor);(editor.firstElementChild as HTMLElement).focus();},editable);
+      await page.keyboard.press('Delete');await expect(page.locator('.react-flow__node-agent')).toHaveCount(2);
+      await page.evaluate(()=>document.querySelector('#test-editable')!.remove());
+    }
     const viewport=await page.locator('.react-flow__viewport').getAttribute('style');
     await page.getByRole('button',{name:'纸白莓红',exact:true}).click();await expect(page.locator('.react-flow__viewport')).toHaveAttribute('style',viewport!);
     await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setSize(1200,850));await expect(page.locator('.react-flow__viewport')).toHaveAttribute('style',viewport!);
