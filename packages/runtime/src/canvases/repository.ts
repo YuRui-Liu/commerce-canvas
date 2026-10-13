@@ -46,8 +46,14 @@ export class CanvasRepository {
       const existing = this.load(projectId, document.id);
       if (existing.document.revision !== expectedRevision) throw new DomainError('REVISION_CONFLICT', 'Canvas changed; keep the draft or reload');
       const versions = new Set([...document.nodes, ...panel.messages.flatMap(m => m.selectedNodes)].flatMap(n => n.assetVersionId ? [n.assetVersionId] : []));
-      // Definitions/runs are not installed until the agent runtime milestone.
-      if ([...document.nodes, ...panel.messages.flatMap(m => m.selectedNodes)].some(n => n.agentDefinitionId || n.runId)) throw new DomainError('INVALID_REFERENCE', 'Agent definition or run is unavailable');
+      for(const node of [...document.nodes,...panel.messages.flatMap(m=>m.selectedNodes)]) {
+        if(node.agentDefinitionId)throw new DomainError('INVALID_REFERENCE','Agent definition is unavailable');
+        if(node.runId){
+          const run=this.db.prepare('SELECT canvas_id,node_id FROM image_runs WHERE id=? AND project_id=?').get(node.runId,projectId);
+          if(!run||run.canvas_id!==document.id||(node.kind!=='output'&&(node.kind!=='generation'||run.node_id!==node.id)))throw new DomainError('INVALID_REFERENCE','Run must belong to this canvas and generation node');
+          if(node.kind==='output'&&node.assetVersionId&&!this.db.prepare('SELECT 1 FROM image_slots WHERE run_id=? AND result_version_id=?').get(node.runId,node.assetVersionId))throw new DomainError('INVALID_REFERENCE','Output version must belong to run');
+        }
+      }
       for (const id of versions) {
         if (!this.db.prepare('SELECT id FROM asset_versions WHERE id=? AND project_id=?').get(id, projectId)) throw new DomainError('INVALID_REFERENCE', 'Asset version must belong to this project');
       }

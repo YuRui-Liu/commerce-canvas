@@ -4,9 +4,10 @@ import foundationSql from './migrations/001-foundation.sql?raw';
 import assetsSql from './migrations/002-assets.sql?raw';
 import settingsSql from './migrations/003-settings.sql?raw';
 import canvasesSql from './migrations/004-canvases.sql?raw';
+import imageGenerationSql from './migrations/005-image-generation.sql?raw';
 
 // Vite/Vitest inline the SQL so packaged apps do not need the source tree.
-const migrations = [{ version: 1, sql: foundationSql }, { version: 2, sql: assetsSql }, { version: 3, sql: settingsSql }, { version: 4, sql: canvasesSql }];
+const migrations = [{ version: 1, sql: foundationSql }, { version: 2, sql: assetsSql }, { version: 3, sql: settingsSql }, { version: 4, sql: canvasesSql }, {version:5,sql:imageGenerationSql}];
 
 export function openDatabase(file: string): DatabaseSync {
   const db = new DatabaseSync(file);

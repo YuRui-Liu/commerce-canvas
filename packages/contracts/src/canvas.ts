@@ -1,9 +1,11 @@
 import { z } from 'zod';
 import { IdSchema, InputRoleSchema, RevisionSchema } from './domain';
+import { GenerationSettingsSchema } from './imageGeneration';
 const Key = z.string().min(1).max(200);
 const Position = z.object({ x:z.number().finite(), y:z.number().finite() }).strict();
 export const CanvasNodeSchema = z.object({
-  id:Key, kind:z.enum(['asset','text','agent','output','group']), position:Position,
+  id:Key, kind:z.enum(['asset','text','agent','generation','output','group']), position:Position,
+  generation:GenerationSettingsSchema.optional(),
   parentId:Key.optional(), assetVersionId:IdSchema.optional(), agentDefinitionId:Key.optional(), runId:Key.optional(),
   stale:z.boolean().optional(),
   width:z.number().positive().max(100000).optional(), height:z.number().positive().max(100000).optional(),
