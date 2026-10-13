@@ -80,14 +80,14 @@ await expect(page.getByTestId('selected-text-node')).toContainText('30 ml');
 
 **创建：** `packages/runtime/src/canvases/repository.ts`；`packages/canvas/src/saveCoordinator.ts`、`useCanvasSync.ts`；`apps/desktop/src/renderer/workspace/panelState.ts`、`ConversationPanel.tsx`；测试 `packages/canvas/test/saveCoordinator.test.ts`、`tests/e2e/canvas-reopen.spec.ts`。
 
-- [ ] 测试保存期间又拖动节点：旧保存完成不得清空新 dirty revision；过期响应不得覆盖新视口。关闭重开后节点、边、分组和视口恢复。
+- [x] 测试保存期间又拖动节点：旧保存完成不得清空新 dirty revision；过期响应不得覆盖新视口。关闭重开后节点、边、分组和视口恢复。
 
 ```ts
 expect(acknowledge({localRevision:4,savedRevision:2},3))
   .toEqual({localRevision:4,savedRevision:3});
 ```
 
-- [ ] 运行 `npm test -- packages/canvas/test/saveCoordinator.test.ts` 确认缺少函数失败。实现 `acknowledge` 忽略超过本地或落后于已保存的响应；保存队列串行，拖动结束合并保存，退出前 flush。先写本地事务，再向 renderer 确认。
-- [ ] 定义 `PanelState` 的 chatDraft、inspectorDrafts（按 node ID）、activeTab、selectedIds。总控收到的引用在发送时快照，随后选中其他节点不改变已发任务输入。
-- [ ] ConversationPanel 先只展示真实持久化消息和运行事件，A4 接入执行；没有运行适配器时显示未连接，不播放假成功。桥接增加 `loadCanvas/saveCanvas/listCanvases`，带 expectedRevision。
-- [ ] 运行 `npm run test:e2e -- tests/e2e/canvas-reopen.spec.ts`、指定单元测试与 typecheck。提交 `git add packages/runtime/src/canvases packages/canvas apps/desktop/src/renderer/workspace packages/contracts/src/bridge.ts tests/e2e/canvas-reopen.spec.ts`，`git commit -m "feat: recover canvas drafts and context"`。
+- [x] 运行保存队列测试并实现过期响应保护；实际测试位于 `packages/canvas/src/saveCoordinator.test.ts`。保存队列串行，拖动结束合并保存，退出前 flush。先写本地事务，再向 renderer 确认。
+- [x] 定义 `PanelState` 的 chatDraft、inspectorDrafts（按 node ID）、activeTab、selectedIds。总控收到的引用在发送时快照，随后选中其他节点不改变已发任务输入。
+- [x] ConversationPanel 先只展示真实持久化消息和运行事件，A4 接入执行；没有运行适配器时显示未连接，不播放假成功。桥接增加 `loadCanvas/saveCanvas/listCanvases`，带 expectedRevision。
+- [x] 实际恢复/竞态测试位于 `apps/desktop/tests/canvas-persistence.spec.ts` 和 `canvas-races.spec.ts`。2026-10-13 重新打包后 19 项隐藏 Electron 测试、61 项单测和 typecheck 通过；规格及质量双审通过，详见 `docs/evidence/c4-persistence.md`。核心提交 `c518503`，后续修复单独提交。
