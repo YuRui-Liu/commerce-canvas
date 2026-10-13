@@ -23,6 +23,20 @@ it('rejects invalid images and missing projects without database references', as
   await expect(service.importImage({ projectId: '00000000-0000-4000-8000-000000000000', bytes: await image(), fileName: 'x' })).rejects.toThrow();
   expect(db.prepare('SELECT * FROM asset_versions').all()).toHaveLength(0);
 });
+it.each(['avif', 'tiff', 'gif'] as const)('rejects unapproved %s format without storing a version', async format => {
+  const bytes = await sharp({ create: { width: 16, height: 8, channels: 3, background: 'red' } }).toFormat(format).toBuffer();
+  await expect(service.importImage({ projectId, bytes, fileName: 'renamed.png' })).rejects.toThrow(/INVALID_IMAGE/);
+  expect(db.prepare('SELECT * FROM asset_versions').all()).toHaveLength(0);
+  expect(readdirSync(join(directory, 'assets', 'originals'))).toHaveLength(0);
+});
+it.each(['png', 'jpeg', 'webp'] as const)('serves accurate %s original MIME regardless of filename', async format => {
+  const bytes = await sharp({ create: { width: 16, height: 8, channels: 3, background: 'red' } }).toFormat(format).toBuffer();
+  const version = await service.importImage({ projectId, bytes, fileName: 'misleading.avif' });
+  const response = await createAssetHandler(service, () => projectId)({ url: `commerce-asset://asset/${version.id}/original` });
+  expect(response.status).toBe(200);
+  expect(response.headers.get('content-type')).toBe(`image/${format}`);
+  expect(Buffer.from(await response.arrayBuffer())).toEqual(bytes);
+});
 it('stores text as text and guards references, trash and project isolation', async () => {
   const a = service.importText({ projectId, text: '文字 🐈' }); expect((await service.read(a.id)).toString()).toBe('文字 🐈');
   service.repository.addReference({ projectId, versionId: a.id, ownerId: 'node-1', kind: 'canvas' });

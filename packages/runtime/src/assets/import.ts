@@ -47,7 +47,7 @@ export class AssetService {
     const bytes = Buffer.from(input.bytes);
     const decoder = sharp(bytes, { limitInputPixels: 40_000_000, failOn: 'warning' });
     const metadata = await decoder.metadata();
-    const mimes: Record<string, string> = { jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', avif: 'image/avif', heif: 'image/heif', tiff: 'image/tiff', gif: 'image/gif' };
+    const mimes: Record<string, string> = { jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
     const mime = metadata.format && mimes[metadata.format];
     if (!mime || !metadata.width || !metadata.height || (metadata.pages ?? 1) > 1 || metadata.width > 100_000 || metadata.height > 100_000) throw new DomainError('INVALID_IMAGE', 'Unsupported image');
     // Metadata alone does not verify a complete image. Force a full bounded decode.
