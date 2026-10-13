@@ -2,6 +2,7 @@ import {useState} from 'react';
 import type {GenerationSettings} from '../../../../../packages/contracts/src/imageGeneration';
 import {resolveGenerationSettings} from '../../../../../packages/runtime/src/imageGeneration/settings';
 import {PhotographyDialog} from './PhotographyDialog';
+import {photographySummary} from './photographySummary';
 import './generation.css';
 export function GenerationControls({value,onChange,onGenerate,busy=false}:{value:GenerationSettings;onChange:(value:GenerationSettings)=>void;onGenerate:()=>void;busy?:boolean}){
  const [photo,setPhoto]=useState(false);
@@ -17,7 +18,7 @@ export function GenerationControls({value,onChange,onGenerate,busy=false}:{value
   </div>
   {value.resolution==='custom'&&<div className="generation-field-grid"><label>宽度 px<input type="number" min={16} max={3840} step={16} value={value.width??''} onChange={e=>patch({width:Number(e.target.value)>0?Math.floor(Number(e.target.value)):undefined})}/></label><label>高度 px<input type="number" min={16} max={3840} step={16} value={value.height??''} onChange={e=>patch({height:Number(e.target.value)>0?Math.floor(Number(e.target.value)):undefined})}/></label></div>}
   <p className="generation-dimensions">{dimensions||'请调整尺寸'}{value.model==='gpt-image-2'&&<small>普通模型仅支持 1K</small>}</p>
-  <button type="button" className="generation-photo-button" onClick={()=>setPhoto(true)}>摄影与灯光<span>{value.photography.camera==='auto'&&value.photography.lighting==='auto'?'自动':'已配置'} ↗</span></button>
+  <button type="button" className="generation-photo-button" onClick={()=>setPhoto(true)}>摄影与灯光<span>{photographySummary(value.photography)} ↗</span></button>
   {error&&<p className="error" role="alert">{error}</p>}
   <button className="button primary generation-submit" disabled={busy||!!error} onClick={onGenerate}>{busy?'正在准备…':'生成图片'}<span aria-hidden="true">↗</span></button>
   <small>先确认参数，再提交至 GRSai。</small>

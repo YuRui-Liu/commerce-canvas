@@ -103,3 +103,18 @@ test('latest config is flushed, review cancellation never submits, undo and late
   await create(page,'迟到响应隔离');await page.waitForTimeout(2200);const next=await saved(page);expect(next.panel.generationDeliveries).toHaveLength(0);expect(next.document.nodes.filter(n=>n.kind==='output')).toHaveLength(0);await page.getByRole('button',{name:'生成历史',exact:true}).click();await expect(page.locator('.generation-inspector')).toContainText('还没有生成记录');expect((await fixtureState(app)).submits).toBe(1);
  }finally{await app.close();rmSync(root,{recursive:true,force:true});}
 });
+
+test('closed inspector card distinguishes approved snapshot and next-run photography edits',async()=>{
+ const root=mkdtempSync(join(tmpdir(),'commercecanvas-e2e-generation-snapshot-'));
+ const app=await electron.launch({...launchTarget,env:{...process.env,COMMERCECANVAS_TEST_USER_DATA:root,COMMERCECANVAS_GENERATION_FIXTURE:'1'}});
+ try{
+  const page=await app.firstWindow();await expect(page.getByRole('status')).toHaveText('本地工作区');await fixtureState(app,{mode:'slow',delay:900});await create(page);await page.getByRole('button',{name:'收起助手',exact:true}).click();
+  const card=page.locator('.generation-card');await card.getByRole('button',{name:'摄影与灯光'}).click();const photo=page.getByRole('dialog',{name:'摄影与灯光'});await photo.getByLabel('镜头',{exact:true}).selectOption('macro');await photo.getByLabel('焦距',{exact:true}).selectOption('100');await photo.getByRole('button',{name:'应用摄影设置'}).click();
+  await expect(card.getByRole('button',{name:'摄影与灯光'})).toContainText('2 项已配置');
+  await card.getByRole('button',{name:'生成图片',exact:true}).click();await page.getByRole('button',{name:'确认生成',exact:true}).click();
+  const snapshot=card.getByLabel('本次生成快照');await expect(snapshot).toContainText('gpt-image-2');await expect(snapshot).toContainText('1024 × 1024');await expect(snapshot).toContainText('1 张');await expect(card.locator('.generation-state')).toContainText(/提交中|生成中/);
+  await card.getByLabel('模型',{exact:true}).selectOption('gpt-image-2-vip');await card.getByLabel('分辨率',{exact:true}).selectOption('4K');await card.getByLabel('生成数量',{exact:true}).selectOption('2');
+  await expect(snapshot).toContainText('gpt-image-2 · 1024 × 1024 px · 1 张');await expect(snapshot).toContainText('参数已修改，仅影响下一次生成');await expect(card).toContainText('2880 × 2880 px');await expect(page.locator('.generation-inspector')).toHaveCount(0);
+  expect((await fixtureState(app)).submits).toBe(1);expect(await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().map(w=>w.isVisible()))).toEqual([false]);
+ }finally{await app.close();rmSync(root,{recursive:true,force:true});}
+});

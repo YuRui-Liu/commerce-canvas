@@ -10,7 +10,7 @@ import {changeEdgeRole,replaceNodeVersion} from './assetEditing';
 import {droppedInput,pastedInput,type AssetInput} from './AssetDropZone';
 import {isEditing} from './inputBindings';
 import {ImageGenerationNode} from './nodes/ImageGenerationNode';
-import {defaultGenerationSettings,type GenerationSettings} from '../../contracts/src/imageGeneration';
+import {defaultGenerationSettings,type GenerationSettings,type GenerationRun} from '../../contracts/src/imageGeneration';
 const roleNames:Record<InputRole,string>={product:'商品',scene:'场景',style:'风格',facts:'资料',instruction:'指令',copy:'文案'};
 type NodeData={node:CanvasNode;asset?:AssetVersion;view:(a:AssetVersion)=>void};
 type AssetBatch={items:AssetVersion[];position:{x:number;y:number};index:number;before?:CanvasDocument};
@@ -28,8 +28,8 @@ const nodeTypes={asset:Card,text:Card,agent:Card,output:Card,group:Card,generati
 export type CanvasHandle={addAssets:(assets:AssetVersion[],position?:{x:number;y:number})=>void;getDocument:()=>CanvasDocument;replaceVersion:(nodeId:string,versionId:string)=>void;setEdgeRole:(edgeId:string,role:InputRole)=>void;clearSelection:()=>void;flushPending:()=>Promise<void>;cancelPending:()=>void;setGeneration:(id:string,value:GenerationSettings)=>void;applyDocument:(document:CanvasDocument,publish?:boolean)=>boolean};
 // document is the initial document for this mount. Use a load epoch/key for explicit
 // replacement; revisions emitted by onChange must not remount/reset gesture history.
-export type CanvasProps={document:CanvasDocument;initialSelection?:string[];disabled?:boolean;assets:AssetVersion[];onChange:(doc:CanvasDocument)=>void;onView:(asset:AssetVersion)=>void;onSelectionChange?:(ids:string[])=>void;onAssetInput?:(input:AssetInput,position:{x:number;y:number})=>void;renderGeneration?:(node:CanvasNode)=>ReactNode;generationStatus?:(id:string)=>string};
-export const Canvas=forwardRef<CanvasHandle,CanvasProps>(function Canvas({document,initialSelection=[],disabled=false,assets,onChange,onView,onSelectionChange,onAssetInput,renderGeneration,generationStatus},ref){
+export type CanvasProps={document:CanvasDocument;initialSelection?:string[];disabled?:boolean;assets:AssetVersion[];onChange:(doc:CanvasDocument)=>void;onView:(asset:AssetVersion)=>void;onSelectionChange?:(ids:string[])=>void;onAssetInput?:(input:AssetInput,position:{x:number;y:number})=>void;renderGeneration?:(node:CanvasNode)=>ReactNode;generationStatus?:(id:string)=>string;generationRun?:(id:string)=>GenerationRun|undefined};
+export const Canvas=forwardRef<CanvasHandle,CanvasProps>(function Canvas({document,initialSelection=[],disabled=false,assets,onChange,onView,onSelectionChange,onAssetInput,renderGeneration,generationStatus,generationRun},ref){
   const [history,setHistory]=useState(()=>createHistory(document));const current=useRef(document);const hist=useRef(history);hist.current=history;
   const [selection,setSelection]=useState<string[]>(initialSelection);const [message,setMessage]=useState('');const [snap,setSnap]=useState(true);
   const [edgeSelection,setEdgeSelection]=useState<string[]>([]);
@@ -125,7 +125,7 @@ export const Canvas=forwardRef<CanvasHandle,CanvasProps>(function Canvas({docume
   }),[addAssets,update,onSelectionChange]);
   const data=history.present;
   const assetMap=useMemo(()=>new Map(assets.map(a=>[a.id,a])),[assets]);
-  const nodes=useMemo(()=>data.nodes.map(n=>({id:n.id,type:n.kind,position:n.position,parentId:n.parentId,selected:selection.includes(n.id),measured:measurements.current.get(n.id),style:n.kind==='group'?{width:n.width,height:n.height}:undefined,data:{node:n,asset:n.assetVersionId?assetMap.get(n.assetVersionId):undefined,view:onView,renderGeneration,generationStatus:generationStatus?.(n.id),inputs:data.edges.filter(e=>e.target===n.id).map(e=>({role:e.role,asset:assetMap.get(data.nodes.find(source=>source.id===e.source)?.assetVersionId??'')}))}})),[data.nodes,data.edges,selection,assetMap,onView,renderGeneration,generationStatus,measurementRevision]);
+  const nodes=useMemo(()=>data.nodes.map(n=>({id:n.id,type:n.kind,position:n.position,parentId:n.parentId,selected:selection.includes(n.id),measured:measurements.current.get(n.id),style:n.kind==='group'?{width:n.width,height:n.height}:undefined,data:{node:n,asset:n.assetVersionId?assetMap.get(n.assetVersionId):undefined,view:onView,renderGeneration,generationStatus:generationStatus?.(n.id),generationRun:generationRun?.(n.id),inputs:data.edges.filter(e=>e.target===n.id).map(e=>({role:e.role,asset:assetMap.get(data.nodes.find(source=>source.id===e.source)?.assetVersionId??'')}))}})),[data.nodes,data.edges,selection,assetMap,onView,renderGeneration,generationStatus,generationRun,measurementRevision]);
   const edges=useMemo(()=>data.edges.map(e=>({...e,selected:edgeSelection.includes(e.id),targetHandle:e.role,sourceHandle:'output',label:roleNames[e.role]})),[data.edges,edgeSelection]);
   const selectionChanged=useCallback(({nodes:chosen}:{nodes:Node[]})=>{onSelectionChange?.(chosen.map(n=>n.id));},[onSelectionChange]);
   const connect=useCallback((c:Connection)=>{if(addingRef.current||disabledRef.current)return;const role=InputRoleSchema.safeParse(c.targetHandle);if(!role.success||!canConnect(current.current,c.source,c.target,role.data)){setMessage('无法连接：检查循环、输入角色是否已占用。');return;}update({...current.current,edges:[...current.current.edges,{id:crypto.randomUUID(),source:c.source,target:c.target,role:role.data}]});setMessage('已连接');},[update]);

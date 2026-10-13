@@ -302,6 +302,7 @@ export function Workspace() {
   const generation=useGenerationRuns({projectId:project?.id,canvasId:graph?.id,canvas,sync,blocked:busy,setAssets,saveProduct:save});
   const generationSelected=selectedNode?.kind==='generation';
   const generationRuns=generationHistory?generation.runs:generation.runs.filter(r=>r.nodeId===selectedNode?.id||r.id===selectedNode?.runId);
+  const approvedGeneration=(id:string)=>generation.runs.find(r=>r.id===graph?.nodes.find(n=>n.id===id)?.runId&&r.approvedAt)||generation.runs.find(r=>r.nodeId===id&&r.approvedAt);
   return <div className="app-shell">
     <header className="topbar">
       <div className="brand">
@@ -342,7 +343,7 @@ export function Workspace() {
         createCanvas={() => void perform(async () => { canvas.current?.cancelPending(); await sync.create(project!.id); })}
         assets={assets} onView={setView} right={right} busy={busy} toggleRight={() => setRight(!right)} upload={() => void importImages()} addText={() => open('text')} create={() => open('create')} onAssetInput={(input,position)=>void receiveAsset(input,position)} onDocumentChange={setGraph} onSelectionChange={onCanvasSelection}
         renderGeneration={node=><GenerationControls value={node.generation??defaultGenerationSettings()} onChange={value=>canvas.current?.setGeneration(node.id,value)} onGenerate={()=>void generation.prepare(node.id)} busy={busy||generation.pending}/>}
-        generationStatus={id=>runLabel(generation.runs.find(r=>r.id===graph?.nodes.find(n=>n.id===id)?.runId))}/>
+        generationRun={approvedGeneration} generationStatus={id=>runLabel(approvedGeneration(id)??generation.runs.find(r=>r.id===graph?.nodes.find(n=>n.id===id)?.runId))}/>
       {right && ((generationSelected||generationHistory)?<GenerationInspector key={generationHistory?'all':selectedNode?.id} node={generationHistory?undefined:selectedNode} runs={generationRuns} busy={busy||generation.pending} error={generation.error} onChange={value=>{if(selectedNode)canvas.current?.setGeneration(selectedNode.id,value);}} onGenerate={()=>{if(selectedNode)void generation.prepare(selectedNode.id);}} onClose={()=>{setGenerationHistory(false);canvas.current?.clearSelection();}} onAct={(...args)=>void generation.act(...args)} onAdapt={(...args)=>void generation.adapt(...args)}/>:selectedNode&&graph&&panel.activeTab!=='chat'?<AssetInspector node={selectedNode} asset={selectedAsset} document={graph} draft={textDrafts[draftKey]??selectedAsset?.text??''}
         onDraft={text=>editPanel(p=>({...p,inspectorDrafts:{...p.inspectorDrafts,[draftKey]:text}}))}
         onSave={()=>void saveNodeText()} onRole={(id,role)=>{if(!lock.current)canvas.current?.setEdgeRole(id,role);}} onChat={()=>editPanel(p=>({...p,activeTab:'chat'}))}

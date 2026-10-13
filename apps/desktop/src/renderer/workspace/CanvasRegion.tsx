@@ -5,6 +5,7 @@ import { Canvas, type CanvasHandle } from '../../../../../packages/canvas/src/Ca
 import { Button } from '../../../../../packages/ui/src/Button';
 import { Icon } from './LeftRail';
 import type { AssetInput } from '../../../../../packages/canvas/src/AssetDropZone';
+import type {GenerationRun} from '../../../../../packages/contracts/src/imageGeneration';
 
 export const CanvasRegion = forwardRef<CanvasHandle, {
   project?: Project; record?: CanvasRecord; canvases: CanvasSummary[]; epoch: number;
@@ -13,8 +14,8 @@ export const CanvasRegion = forwardRef<CanvasHandle, {
   toggleRight: () => void; upload: () => void; addText: () => void; create: () => void;
   onAssetInput: (input: AssetInput, position: { x: number; y: number }) => void;
   onSelectionChange: (ids: string[]) => void; onDocumentChange: (doc: CanvasDocument) => void;
-  renderGeneration?:(node:CanvasNode)=>ReactNode;generationStatus?:(id:string)=>string;
-}>(function CanvasRegion({ project, record, canvases, epoch, selectCanvas, createCanvas, assets, onView, right, busy, toggleRight, upload, addText, create, onAssetInput, onSelectionChange, onDocumentChange,renderGeneration,generationStatus }, ref) {
+  renderGeneration?:(node:CanvasNode)=>ReactNode;generationStatus?:(id:string)=>string;generationRun?:(id:string)=>GenerationRun|undefined;
+}>(function CanvasRegion({ project, record, canvases, epoch, selectCanvas, createCanvas, assets, onView, right, busy, toggleRight, upload, addText, create, onAssetInput, onSelectionChange, onDocumentChange,renderGeneration,generationStatus,generationRun }, ref) {
   return <main className="canvas-main">
     <div className="canvas-toolbar">
       <div><strong>{project?.name ?? '商品创作工作区'}</strong><small>画布</small></div>
@@ -22,7 +23,7 @@ export const CanvasRegion = forwardRef<CanvasHandle, {
       <Button variant="quiet" aria-pressed={right} onClick={toggleRight}>{right ? '收起助手' : '展开助手'}</Button>
     </div>
     <div className="canvas-surface">
-      {project && record && record.document.projectId === project.id && <Canvas key={`${record.document.id}:${epoch}`} ref={ref} document={record.document} initialSelection={record.panel.selectedIds} disabled={busy} assets={assets} onView={onView} onAssetInput={onAssetInput} onSelectionChange={onSelectionChange} onChange={onDocumentChange} renderGeneration={renderGeneration} generationStatus={generationStatus} />}
+      {project && record && record.document.projectId === project.id && <Canvas key={`${record.document.id}:${epoch}`} ref={ref} document={record.document} initialSelection={record.panel.selectedIds} disabled={busy} assets={assets} onView={onView} onAssetInput={onAssetInput} onSelectionChange={onSelectionChange} onChange={onDocumentChange} renderGeneration={renderGeneration} generationStatus={generationStatus} generationRun={generationRun} />}
       {!record?.document.nodes.length && <div className="canvas-empty" style={{ pointerEvents: 'none', position: 'relative', zIndex: 2 }}>
         <span className="canvas-emblem"><Icon kind="assets" /></span><p className="eyebrow">你的下一张商品图，从这里开始</p>
         <h1>{project ? '给商品一个新的表达。' : '把商品与灵感，放在一起。'}</h1>
