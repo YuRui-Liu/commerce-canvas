@@ -16,17 +16,17 @@
 
 **创建：** `packages/ui/src/theme/tokens.css`、`ThemeProvider.tsx`、`Button.tsx`、`Dialog.tsx`；`apps/desktop/src/renderer/workspace/Workspace.tsx`、`ProjectSwitcher.tsx`、`LeftRail.tsx`、`RightPanel.tsx`、`SettingsPanel.tsx`；`tests/e2e/workspace.spec.ts`。
 
-- [ ] 实现主题变量并接入 F4 的 `getTheme/setTheme`；仅两个主题可选，未配置默认 studio。
+- [x] 实现主题变量并接入 F4 的 `getTheme/setTheme`；仅两个主题可选，未配置默认 studio。
 
 ```css
 :root,[data-theme="studio"]{--panel:#fff;--canvas:#f0f2f5;--ink:#20242d;--muted:#626978;--accent:#3659df;--line:#e2e5eb}
 [data-theme="editorial"]{--panel:#fffefd;--canvas:#eeecea;--ink:#272326;--muted:#72696b;--accent:#a9344e;--line:#e5dfe0}
 ```
 
-- [ ] 布局默认 56 px 左工具栏、224 px 素材面板、可伸缩画布、320 px 右面板。低于 1280 px 时素材面板可折叠；右侧配置与对话切换保留草稿。图标采用统一线性 SVG，危险操作与主要执行按钮有不同语义，禁止把瓶身示意色作为 UI 主题。
-- [ ] 实现商品项目创建、切换、事实编辑、SKU 和品牌表单，调用 F2 repository 对应桥接；切换项目前提交草稿，保存冲突显示重载／另存，不覆盖远端较新 revision。
-- [ ] 浏览器检查 1440×960、1280×800、1024×768，A／B 各一张截图。实际点击主题切换、重启恢复、折叠侧栏、键盘进入对话和配置，验证文字可读与焦点可见。主题变化前后同一资产版本 hash 必须相同。
-- [ ] 提交 `git add packages/ui apps/desktop/src/renderer/workspace tests/e2e/workspace.spec.ts`，`git commit -m "feat: build themed product workspace"`。
+- [x] 布局默认 56 px 左工具栏、224 px 素材面板、可伸缩画布、320 px 右面板。低于 1280 px 时素材面板可折叠；右侧配置与对话切换保留草稿。图标采用统一线性 SVG，危险操作与主要执行按钮有不同语义，禁止把瓶身示意色作为 UI 主题。
+- [x] 实现商品项目创建、切换、事实编辑、SKU 和品牌表单，调用 F2 repository 对应桥接；切换项目前提交草稿，保存冲突显示重载／另存，不覆盖远端较新 revision。
+- [x] 浏览器检查 1440×960、1280×800、1024×768，A／B 各一张截图。实际点击主题切换、重启恢复、折叠侧栏、键盘进入对话和配置，验证文字可读与焦点可见。主题变化前后同一资产版本 hash 必须相同。
+- [x] 提交 `git add packages/ui apps/desktop/src/renderer/workspace tests/e2e/workspace.spec.ts`，`git commit -m "feat: build themed product workspace"`。实际测试位于 `apps/desktop/tests/workspace.spec.ts`；完成提交 50607a2、312833b。
 
 ## C2 图结构、连线和 Nuomi 部件抽取
 
