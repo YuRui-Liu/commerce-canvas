@@ -34,9 +34,9 @@ test('generation configuration, photography and missing credential review remain
  await card.getByLabel('画面描述').fill('保留商品标签，白色背景');
  await card.getByLabel('画面描述').press('Delete');await expect(card).toBeVisible();
  await card.getByRole('button',{name:'摄影与灯光'}).click();
- const photo=page.getByRole('dialog',{name:'摄影与灯光'});await photo.getByLabel('相机').selectOption('fullframe');await photo.getByLabel('镜头').selectOption('macro');
- await photo.getByLabel('灯光方案').selectOption('window');await photo.getByRole('button',{name:'应用摄影设置'}).click();
- await card.getByRole('button',{name:'摄影与灯光'}).click();await expect(photo.getByLabel('相机')).toHaveValue('fullframe');await photo.press('Escape');
+ const photo=page.getByRole('dialog',{name:'摄影与灯光'});await photo.getByRole('button',{name:'相机 全画幅',exact:true}).click();await photo.getByRole('button',{name:'镜头 微距',exact:true}).click();
+ await photo.getByRole('tab',{name:/灯光/}).click();await photo.getByRole('button',{name:'灯光方案 窗光',exact:true}).click();await photo.getByRole('button',{name:'应用摄影设置'}).click();
+ await card.getByRole('button',{name:'摄影与灯光'}).click();await expect(photo.getByRole('button',{name:'相机 全画幅',exact:true})).toHaveAttribute('aria-pressed','true');await photo.press('Escape');
  await expect(card.getByRole('button',{name:'摄影与灯光'})).toBeFocused();
  await card.getByRole('button',{name:'生成图片',exact:true}).click();const review=page.getByRole('dialog',{name:'确认图片生成'});await expect(review).toContainText('1024 × 1024');
   await review.getByRole('button',{name:'确认生成',exact:true}).click();await expect(review).toContainText('凭证');
@@ -53,17 +53,18 @@ test('fixture exercises confirmation, partial/unknown recovery, derivatives and 
  const app=await electron.launch({...launchTarget,env:{...process.env,COMMERCECANVAS_TEST_USER_DATA:root,COMMERCECANVAS_GENERATION_FIXTURE:'1'}});
  try{
   const page=await app.firstWindow();await expect(page.getByRole('status')).toHaveText('本地工作区');await fixtureState(app,{mode:'partial'});await create(page);
-  const card=page.locator('.generation-card');await card.getByLabel('画面描述').fill('保留商品，柔光白底');await card.getByLabel('生成数量').selectOption('3');
+  const card=page.locator('.generation-card');await card.getByLabel('画面描述').fill('保留商品，柔光白底');await card.getByRole('button',{name:'生成数量',exact:true}).click();await page.getByRole('button',{name:'3 张',exact:true}).click();
   await card.getByRole('button',{name:'生成图片',exact:true}).click();const review=page.getByRole('dialog',{name:'确认图片生成'});await expect(review).toBeVisible();expect((await fixtureState(app)).submits).toBe(0);
   await review.getByRole('button',{name:'确认生成',exact:true}).evaluate((button:HTMLButtonElement)=>{button.click();button.click();});
-  const inspector=page.locator('.generation-inspector');await expect(inspector.getByText('1 成功 · 1 失败',{exact:true})).toBeVisible();await expect(inspector.getByRole('button',{name:'绑定已有任务 ID'})).toBeVisible();expect((await fixtureState(app)).submits).toBe(3);
+  await page.getByRole('button',{name:'生成历史',exact:true}).click();const inspector=page.locator('.generation-inspector');await expect(inspector.getByText('1 成功 · 1 失败',{exact:true})).toBeVisible();await expect(inspector.getByRole('button',{name:'绑定已有任务 ID'})).toBeVisible();expect((await fixtureState(app)).submits).toBe(3);
   await expect.poll(async()=>(await saved(page)).panel.generationDeliveries.length).toBe(1);
   await inspector.getByRole('button',{name:'绑定已有任务 ID'}).click();const bind=page.getByRole('dialog',{name:'绑定已有任务',exact:true});await expect(bind).toContainText('不能保证');await bind.getByLabel('任务 ID').fill('fixture-4');await bind.getByLabel('我确认需要关联这个已有任务').check();await bind.getByRole('button',{name:'确认绑定'}).click();
   await expect.poll(async()=>(await saved(page)).panel.generationDeliveries.length).toBe(2);expect((await fixtureState(app)).submits).toBe(3);
+  const preview=card.locator('.generation-main-preview img'),firstPreview=await preview.getAttribute('src');await card.getByRole('button',{name:'下一张结果'}).click();await expect(preview).not.toHaveAttribute('src',firstPreview!);await card.getByRole('button',{name:'查看生成原图'}).click();await expect(page.getByRole('dialog')).toBeVisible();await page.keyboard.press('Escape');
   const slot=inspector.locator('.generation-slot').first();await expect(slot).toContainText('实际 800 × 600');await expect(slot).toContainText('实际尺寸与请求尺寸不同');await slot.getByText('适配为目标尺寸',{exact:true}).click();await expect(slot.getByLabel('适配方式')).toHaveValue('contain');await slot.getByRole('button',{name:'创建适配版本'}).click();
   await expect.poll(async()=>(await saved(page)).panel.generationDeliveries.length).toBe(3);await expect(slot.locator('.generation-derivative')).toContainText('1024 × 1024');
   const before=await saved(page);const resultId=before.document.nodes.find(n=>n.kind==='output')!.id;
-  await page.getByRole('button',{name:'适合视图',exact:true}).click();await page.locator(`[data-id="${resultId}"] header`).click();await page.getByRole('button',{name:'删除所选',exact:true}).click();
+  await page.getByRole('button',{name:'适合视图',exact:true}).click();await page.locator(`[data-id="${resultId}"] header`).click();await page.getByRole('button',{name:'移除节点',exact:true}).click();
   await expect.poll(async()=>(await saved(page)).document.nodes.some(n=>n.id===resultId)).toBe(false);await page.waitForTimeout(1100);await page.reload();await expect(page.getByRole('button',{name:'添加出图节点',exact:true})).toBeVisible();
   await page.waitForTimeout(1100);const after=await saved(page);expect(after.document.nodes.some(n=>n.id===resultId)).toBe(false);expect(after.panel.generationDeliveries).toHaveLength(3);expect((await fixtureState(app)).submits).toBe(3);
  }finally{await app.close();rmSync(root,{recursive:true,force:true});}
@@ -74,17 +75,18 @@ test('all photography groups, exact VIP sizes and themes fit hidden 1440/1024 wi
  const app=await electron.launch({...launchTarget,env:{...process.env,COMMERCECANVAS_TEST_USER_DATA:root}});
  try{
   const page=await app.firstWindow();await expect(page.getByRole('status')).toHaveText('本地工作区');await create(page);const card=page.locator('.generation-card');await card.getByLabel('画面描述').fill('玻璃香水瓶，保留品牌文字与瓶身比例，柔和自然光。');
-  await expect(card.getByLabel('分辨率').locator('option[value="4K"]')).toHaveAttribute('disabled','');await card.getByLabel('模型',{exact:true}).selectOption('gpt-image-2-vip');await card.getByLabel('分辨率').selectOption('4K');await expect(card).toContainText('2880 × 2880 px');
+  await card.getByRole('button',{name:'画幅与尺寸',exact:true}).click();await expect(page.getByRole('button',{name:'4K',exact:true})).toBeDisabled();await page.keyboard.press('Escape');await card.getByRole('button',{name:'选择模型',exact:true}).click();await page.getByRole('button',{name:/GPT Image 2 VIP/}).click();await card.getByRole('button',{name:'画幅与尺寸',exact:true}).click();await page.getByRole('button',{name:'4K',exact:true}).click();await expect(page.getByRole('dialog',{name:'画幅与尺寸'})).toContainText('2880 × 2880 px');await page.getByRole('button',{name:'应用尺寸'}).click();
   await card.getByRole('button',{name:'摄影与灯光'}).click();const photo=page.getByRole('dialog',{name:'摄影与灯光'});
-  for(const [label,value] of [['相机','custom'],['镜头','macro'],['光圈','f8'],['拍摄角度','45'],['取景','detail'],['灯光方案','jewelry'],['光线方向','left45'],['柔硬程度','soft'],['色温','neutral'],['阴影强度','light'],['焦距','custom']])await photo.getByLabel(label,{exact:true}).selectOption(value);
-  await photo.getByLabel('相机风格描述').fill('复古商业摄影');await photo.getByLabel('自定义焦距 mm').fill('120');await photo.getByRole('button',{name:'应用摄影设置'}).click();
+  for(const label of ['相机 自定义','镜头 微距','光圈 f8'])await photo.getByRole('button',{name:label,exact:true}).click();await photo.getByLabel('焦距',{exact:true}).selectOption('custom');await photo.getByLabel('相机风格描述').fill('复古商业摄影');await photo.getByLabel('自定义焦距 mm').fill('120');
+  await photo.getByRole('tab',{name:/构图/}).click();for(const label of ['拍摄角度 45°','取景 细节'])await photo.getByRole('button',{name:label,exact:true}).click();
+  await photo.getByRole('tab',{name:/灯光/}).click();for(const label of ['灯光方案 珠宝光','光线方向 左侧 45°','柔硬程度 柔光','色温 中性','阴影强度 浅'])await photo.getByRole('button',{name:label,exact:true}).click();await photo.getByRole('button',{name:'应用摄影设置'}).click();
   await expect.poll(async()=>(await saved(page)).document.nodes.find(n=>n.kind==='generation')?.generation?.photography).toMatchObject({camera:'custom',customCamera:'复古商业摄影',lens:'macro',focalLength:120,aperture:'f8',angle:'45',framing:'detail',lighting:'jewelry',direction:'left45',softness:'soft',temperature:'neutral',shadow:'light'});
-  await page.waitForTimeout(500);await page.reload();await expect(page.locator('.generation-card').getByLabel('分辨率')).toHaveValue('4K');await page.locator('.generation-card').getByRole('button',{name:'摄影与灯光'}).click();await expect(photo.getByLabel('相机风格描述')).toHaveValue('复古商业摄影');await expect(photo.getByLabel('自定义焦距 mm')).toHaveValue('120');await photo.getByRole('button',{name:'重置为自动'}).click();await photo.getByRole('button',{name:'取消',exact:true}).click();
+  await page.waitForTimeout(500);await page.reload();await expect(page.locator('.generation-card').getByRole('button',{name:'画幅与尺寸'})).toContainText('4K');await page.locator('.generation-card').getByRole('button',{name:'摄影与灯光'}).click();await expect(photo.getByLabel('相机风格描述')).toHaveValue('复古商业摄影');await expect(photo.getByLabel('自定义焦距 mm')).toHaveValue('120');await photo.getByRole('button',{name:'重置为自动'}).click();await photo.getByRole('button',{name:'取消',exact:true}).click();
   for(const width of [1440,1024]){
    await app.evaluate(({BrowserWindow},width)=>{BrowserWindow.getAllWindows()[0].setSize(width,900);},width);
    if(width<1280&&await page.getByRole('button',{name:'素材库',exact:true}).getAttribute('aria-pressed')==='true')await page.getByRole('button',{name:'素材库',exact:true}).click();
    for(const [theme,name] of [['studio','白瓷钴蓝'],['editorial','纸白莓红']]){
-    await page.getByRole('button',{name,exact:true}).click();await page.getByRole('button',{name:'适合视图',exact:true}).click();await page.waitForTimeout(250);await page.screenshot({path:`apps/desktop/dist/generation-${theme}-${width}.png`});
+    await page.getByRole('button',{name,exact:true}).click();await page.getByRole('button',{name:'适合视图',exact:true}).click();await page.waitForTimeout(250);const generateBounds=await page.getByRole('button',{name:'生成图片',exact:true}).boundingBox(),canvasBounds=await page.locator('.react-flow').boundingBox();expect(generateBounds!.y+generateBounds!.height).toBeLessThanOrEqual(canvasBounds!.y+canvasBounds!.height-10);await page.screenshot({path:`apps/desktop/dist/generation-${theme}-${width}.png`});
     await page.locator('.generation-card').getByRole('button',{name:'摄影与灯光'}).click();await expect(photo).toBeVisible();const bounds=await photo.boundingBox();expect(bounds!.y).toBeGreaterThanOrEqual(0);expect(bounds!.y+bounds!.height).toBeLessThanOrEqual(901);await page.screenshot({path:`apps/desktop/dist/generation-photo-${theme}-${width}.png`});await photo.press('Escape');
    }
   }
@@ -97,8 +99,8 @@ test('deleted source stays absent while history collects known tasks without res
  const app=await electron.launch({...launchTarget,env:{...process.env,COMMERCECANVAS_TEST_USER_DATA:root,COMMERCECANVAS_GENERATION_FIXTURE:'1'}});
  try{
   const page=await app.firstWindow();await expect(page.getByRole('status')).toHaveText('本地工作区');await fixtureState(app,{mode:'slow'});await create(page);
-  await page.locator('.generation-card').getByRole('button',{name:'生成图片',exact:true}).click();await page.getByRole('button',{name:'确认生成',exact:true}).click();await expect(page.locator('.generation-inspector .generation-run-state')).toHaveText('状态待确认');
-  await page.getByRole('button',{name:'删除所选',exact:true}).click();await expect(page.locator('.generation-card')).toHaveCount(0);await page.getByRole('button',{name:'生成历史',exact:true}).click();await fixtureState(app,{mode:'success'});await page.getByRole('button',{name:'继续查询 / 收取结果'}).click();
+  await page.locator('.generation-card').getByRole('button',{name:'生成图片',exact:true}).click();await page.getByRole('button',{name:'确认生成',exact:true}).click();await page.getByRole('button',{name:'生成历史',exact:true}).click();await expect(page.locator('.generation-inspector .generation-run-state')).toHaveText('状态待确认');
+  await page.getByRole('button',{name:'移除节点',exact:true}).click();await expect(page.locator('.generation-card')).toHaveCount(0);await page.getByRole('button',{name:'生成历史',exact:true}).click();await fixtureState(app,{mode:'success'});await page.getByRole('button',{name:'继续查询 / 收取结果'}).click();
   await expect.poll(async()=>(await saved(page)).panel.generationDeliveries.length).toBe(1);expect((await saved(page)).document.nodes).toHaveLength(0);expect((await fixtureState(app)).submits).toBe(1);
   await create(page,'另一个商品');await page.waitForTimeout(1200);expect((await saved(page)).document.nodes.every(n=>n.kind==='generation')).toBe(true);expect((await saved(page)).panel.generationDeliveries).toHaveLength(0);
  }finally{await app.close();rmSync(root,{recursive:true,force:true});}
@@ -121,13 +123,13 @@ test('closed inspector card distinguishes approved snapshot and next-run photogr
  const root=mkdtempSync(join(tmpdir(),'commercecanvas-e2e-generation-snapshot-'));
  const app=await electron.launch({...launchTarget,env:{...process.env,COMMERCECANVAS_TEST_USER_DATA:root,COMMERCECANVAS_GENERATION_FIXTURE:'1'}});
  try{
-  const page=await app.firstWindow();await expect(page.getByRole('status')).toHaveText('本地工作区');await fixtureState(app,{mode:'slow',delay:900});await create(page);await page.getByRole('button',{name:'收起助手',exact:true}).click();
-  const card=page.locator('.generation-card');await card.getByRole('button',{name:'摄影与灯光'}).click();const photo=page.getByRole('dialog',{name:'摄影与灯光'});await photo.getByLabel('镜头',{exact:true}).selectOption('macro');await photo.getByLabel('焦距',{exact:true}).selectOption('100');await photo.getByRole('button',{name:'应用摄影设置'}).click();
+  const page=await app.firstWindow();await expect(page.getByRole('status')).toHaveText('本地工作区');await fixtureState(app,{mode:'slow',delay:900});await create(page);
+  const card=page.locator('.generation-card');await card.getByRole('button',{name:'摄影与灯光'}).click();const photo=page.getByRole('dialog',{name:'摄影与灯光'});await photo.getByRole('button',{name:'镜头 微距',exact:true}).click();await photo.getByLabel('焦距',{exact:true}).selectOption('100');await photo.getByRole('button',{name:'应用摄影设置'}).click();
   await expect(card.getByRole('button',{name:'摄影与灯光'})).toContainText('2 项已配置');
   await card.getByRole('button',{name:'生成图片',exact:true}).click();await page.getByRole('button',{name:'确认生成',exact:true}).click();
   const snapshot=card.getByLabel('本次生成快照');await expect(snapshot).toContainText('gpt-image-2');await expect(snapshot).toContainText('1024 × 1024');await expect(snapshot).toContainText('1 张');await expect(card.locator('.generation-state')).toContainText(/提交中|生成中/);
-  await card.getByLabel('模型',{exact:true}).selectOption('gpt-image-2-vip');await card.getByLabel('分辨率',{exact:true}).selectOption('4K');await card.getByLabel('生成数量',{exact:true}).selectOption('2');
-  await expect(snapshot).toContainText('gpt-image-2 · 1024 × 1024 px · 1 张');await expect(snapshot).toContainText('参数已修改，仅影响下一次生成');await expect(card).toContainText('2880 × 2880 px');await expect(page.locator('.generation-inspector')).toHaveCount(0);
+  await card.getByRole('button',{name:'选择模型',exact:true}).click();await page.getByRole('button',{name:/GPT Image 2 VIP/}).click();await card.getByRole('button',{name:'画幅与尺寸',exact:true}).click();await page.getByRole('button',{name:'4K',exact:true}).click();await expect(page.getByRole('dialog',{name:'画幅与尺寸'})).toContainText('2880 × 2880 px');await page.getByRole('button',{name:'应用尺寸'}).click();await card.getByRole('button',{name:'生成数量',exact:true}).click();await page.getByRole('button',{name:'2 张',exact:true}).click();
+  await expect(snapshot).toContainText('gpt-image-2 · 1024 × 1024 px · 1 张');await expect(snapshot).toContainText('参数已修改，仅影响下一次生成');await expect(card.getByRole('button',{name:'画幅与尺寸'})).toContainText('4K');await expect(page.locator('.generation-inspector')).toHaveCount(0);
   expect((await fixtureState(app)).submits).toBe(1);expect(await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().map(w=>w.isVisible()))).toEqual([false]);
  }finally{await app.close();rmSync(root,{recursive:true,force:true});}
 });

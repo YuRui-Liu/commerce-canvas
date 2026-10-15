@@ -27,6 +27,8 @@ import {GenerationInspector} from '../generation/GenerationInspector';
 import {GenerationReview} from '../generation/GenerationReview';
 import {useGenerationRuns,runLabel} from '../generation/useGenerationRuns';
 import {latestApprovedGeneration} from '../generation/generationSelection';
+import {ScenarioDialog} from '../generation/ScenarioDialog';
+import {scenarioSettings} from '../generation/scenarios';
 const bridge = window.commerceCanvas;
 export function Workspace() {
   const canvas=useRef<CanvasHandle>(null);
@@ -36,6 +38,10 @@ export function Workspace() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [dirty, setDirty] = useState(false);
   const [assets, setAssets] = useState<AssetVersion[]>([]);
+  const [trashedAssets, setTrashedAssets] = useState<AssetVersion[]>([]);
+  const [showDeleted, setShowDeleted] = useState(false);
+  const [lastDeleted, setLastDeleted] = useState<AssetVersion | null>(null);
+  const allAssets = [...assets, ...trashedAssets];
   const [busy, setBusy] = useState(true);
   const lock = useRef(true);
   const [status, setStatus] = useState('正在载入工作区');
@@ -51,6 +57,7 @@ export function Workspace() {
   const [view, setView] = useState<AssetVersion | null>(null);
   const [comparison,setComparison]=useState<AssetVersion[]>([]);
   const [generationHistory,setGenerationHistory]=useState(false);
+  const [scenariosOpen,setScenariosOpen]=useState(false);
   const graph = sync.record?.document;
   const panel = sync.record?.panel ?? emptyPanel();
   const selection = panel.selectedIds;
@@ -69,6 +76,7 @@ export function Workspace() {
     if (!data)
       throw Error('NOT_FOUND');
     const nextAssets = await bridge.listAssets({ projectId: id });
+    const nextTrashed = await bridge.listAssets({ projectId: id, trashed:true });
     const prepared = await sync.prepareProject(id);
     const nextDraft = {
       facts: { ...data.project.facts },
@@ -87,6 +95,7 @@ export function Workspace() {
     setDirty(false);
     setConflict(false);
     setAssets(nextAssets);
+    setTrashedAssets(nextTrashed);setShowDeleted(false);setLastDeleted(null);
     setStatus('已保存');
   }
   useEffect(() => {
@@ -177,6 +186,21 @@ export function Workspace() {
   const switchProject = (id: string) => void perform(async () => {
     if (await save()) await load(id);
   });
+  async function changeAssetTrash(asset: AssetVersion, trashed: boolean) {
+    if (!project || asset.projectId !== project.id) return;
+    await perform(async () => {
+      try {
+        await bridge[trashed ? 'trashAsset' : 'restoreAsset']({projectId:project.id,assetId:asset.assetId});
+        const [active,deleted] = await Promise.all([bridge.listAssets({projectId:project.id}),bridge.listAssets({projectId:project.id,trashed:true})]);
+        setAssets(active);setTrashedAssets(deleted);
+        setLastDeleted(trashed?asset:null);
+        setComparison(previous=>previous.filter(item=>item.assetId!==asset.assetId));
+        setStatus(trashed?'素材已移到已删除；画布引用和历史版本保留':'素材已恢复');
+      } catch (error) {
+        setStatus(String(error).includes('ACTIVE_REFERENCE')?'素材正在被生成任务使用，请等待任务结束再删除。':'素材操作失败，请重试。');
+      }
+    });
+  }
   function open(kind: typeof modal) {
     if (lock.current && kind !== 'settings') return;
     setModalError('');
@@ -268,7 +292,7 @@ export function Workspace() {
     });
   }
   const selectedNode=graph?.nodes.find(n=>n.id===selection[0]);
-  const selectedAsset=assets.find(a=>a.id===selectedNode?.assetVersionId);
+  const selectedAsset=allAssets.find(a=>a.id===selectedNode?.assetVersionId);
   const draftKey=selectedNode?.id??'';
   async function saveNodeText(){
     if(!project||!selectedNode||selectedAsset?.kind!=='text')return;
@@ -302,6 +326,7 @@ export function Workspace() {
   }
   const generation=useGenerationRuns({projectId:project?.id,canvasId:graph?.id,canvas,sync,blocked:busy,setAssets,saveProduct:save});
   const generationSelected=selectedNode?.kind==='generation';
+  const rightVisible=right&&(!generationSelected||generationHistory);
   const generationRuns=generationHistory?generation.runs:generation.runs.filter(r=>r.nodeId===selectedNode?.id||r.id===selectedNode?.runId);
   const approvedGeneration=(id:string)=>latestApprovedGeneration(generation.runs,id,graph?.nodes.find(n=>n.id===id)?.runId);
   return <div className="app-shell">
@@ -317,8 +342,8 @@ export function Workspace() {
       <Button variant="quiet" disabled={!project||busy} onClick={()=>{setGenerationHistory(true);setRight(true);}}>生成历史</Button>
       <Button variant="quiet" onClick={() => open('settings')}>设置</Button>
     </header>
-    <div className={`workspace-grid ${library ? '' : 'library-closed'} ${right ? '' : 'right-closed'}`}>
-      <LeftRail library={library} toggleLibrary={() => setLibrary(!library)} openSettings={() => open('settings')} onNotice={setNotice} />
+    <div className={`workspace-grid ${library ? '' : 'library-closed'} ${rightVisible ? '' : 'right-closed'}`}>
+      <LeftRail library={library} toggleLibrary={() => setLibrary(!library)} openSettings={() => open('settings')} openScenarios={()=>{if(!busy){if(project)setScenariosOpen(true);else open('create');}}} onNotice={setNotice} />
       {library && <aside className="asset-panel">
         <div className="panel-heading">
           <h2>素材库</h2>
@@ -329,12 +354,15 @@ export function Workspace() {
             <Icon kind="upload" />上传图片</Button>
           <Button onClick={() => project ? open('text') : open('create')} disabled={busy}>添加文本</Button>
         </div>
-        {assets.length === 0 ? <div className="library-empty">
+        <div className="asset-actions" aria-label="素材分类"><Button aria-pressed={!showDeleted} onClick={()=>setShowDeleted(false)}>全部素材</Button><Button aria-pressed={showDeleted} onClick={()=>setShowDeleted(true)}>已删除（{new Set(trashedAssets.map(a=>a.assetId)).size}）</Button></div>
+        {lastDeleted&&<p role="status">已删除素材，画布引用保留。<Button disabled={busy} onClick={()=>void changeAssetTrash(lastDeleted,false)}>撤销删除</Button></p>}
+        {showDeleted&&<p className="muted">删除会收起该素材的全部版本；恢复后可继续编辑与生成。</p>}
+        {(showDeleted?trashedAssets:assets).length === 0 ? <div className="library-empty">
           <Icon kind="assets" />
-          <h3>为创作备好素材</h3>
+          <h3>{showDeleted?'没有已删除素材':'为创作备好素材'}</h3>
           <p>商品图片、参考图和文本，<br />都会保存在这里。</p>
           <small>PNG、JPG、WebP</small>
-        </div> : <AssetLibrary assets={assets} busy={busy} onView={setView} onAdd={a=>canvas.current?.addAssets([a])} onCompare={a=>setComparison(previous=>previous.length===1?[previous[0],a]:[a])}/>}
+        </div> : <AssetLibrary assets={showDeleted?trashedAssets:assets} trashed={showDeleted} busy={busy} onView={setView} onAdd={a=>canvas.current?.addAssets([a])} onCompare={a=>setComparison(previous=>previous.length===1?[previous[0],a]:[a])} onDelete={a=>void changeAssetTrash(a,true)} onRestore={a=>void changeAssetTrash(a,false)}/>}
         {comparison.length===1&&<p role="status">已选 1 张，请再选择一张对比。<Button onClick={()=>setComparison([])}>取消对比</Button></p>}
         {!!importResults.length&&<ul className="import-results" aria-label="逐文件导入结果">{importResults.map((result,index)=><li key={index}>{result.name}：{result.ok?'成功':'失败（请检查格式、大小或文件）'}</li>)}</ul>}
         <div className="library-foot">素材保存在本机</div>
@@ -342,10 +370,11 @@ export function Workspace() {
       <CanvasRegion ref={canvas} project={project} record={sync.record} canvases={sync.list} epoch={sync.epoch}
         selectCanvas={id => void perform(async () => { canvas.current?.cancelPending(); await sync.loadProject(project!.id, id); })}
         createCanvas={() => void perform(async () => { canvas.current?.cancelPending(); await sync.create(project!.id); })}
-        assets={assets} onView={setView} right={right} busy={busy} toggleRight={() => setRight(!right)} upload={() => void importImages()} addText={() => open('text')} create={() => open('create')} onAssetInput={(input,position)=>void receiveAsset(input,position)} onDocumentChange={setGraph} onSelectionChange={onCanvasSelection}
+        assets={allAssets} onView={setView} right={rightVisible} busy={busy} toggleRight={() => {if(generationSelected){setGenerationHistory(!generationHistory);setRight(true);}else setRight(!right);}} upload={() => void importImages()} addText={() => open('text')} create={() => open('create')} onAssetInput={(input,position)=>void receiveAsset(input,position)} onDocumentChange={setGraph} onSelectionChange={onCanvasSelection}
         renderGeneration={node=><GenerationControls value={node.generation??defaultGenerationSettings()} onChange={value=>canvas.current?.setGeneration(node.id,value)} onGenerate={()=>void generation.prepare(node.id)} busy={busy||generation.pending}/>}
         generationRun={approvedGeneration} generationStatus={id=>runLabel(approvedGeneration(id)??generation.runs.find(r=>r.id===graph?.nodes.find(n=>n.id===id)?.runId))}/>
-      {right && ((generationSelected||generationHistory)?<GenerationInspector key={generationHistory?'all':selectedNode?.id} node={generationHistory?undefined:selectedNode} runs={generationRuns} busy={busy||generation.pending} error={generation.error} onChange={value=>{if(selectedNode)canvas.current?.setGeneration(selectedNode.id,value);}} onGenerate={()=>{if(selectedNode)void generation.prepare(selectedNode.id);}} onClose={()=>{setGenerationHistory(false);canvas.current?.clearSelection();}} onAct={(...args)=>void generation.act(...args)} onAdapt={(...args)=>void generation.adapt(...args)}/>:selectedNode&&graph&&panel.activeTab!=='chat'?<AssetInspector node={selectedNode} asset={selectedAsset} document={graph} draft={textDrafts[draftKey]??selectedAsset?.text??''}
+      {rightVisible && ((generationSelected||generationHistory)?<GenerationInspector key={generationHistory?'all':selectedNode?.id} node={generationHistory?undefined:selectedNode} runs={generationRuns} busy={busy||generation.pending} error={generation.error} onChange={value=>{if(selectedNode)canvas.current?.setGeneration(selectedNode.id,value);}} onGenerate={()=>{if(selectedNode)void generation.prepare(selectedNode.id);}} onClose={()=>setGenerationHistory(false)} onAct={(...args)=>void generation.act(...args)} onAdapt={(...args)=>void generation.adapt(...args)}/>:selectedNode&&graph&&panel.activeTab!=='chat'?<AssetInspector node={selectedNode} asset={selectedAsset} document={graph} draft={textDrafts[draftKey]??selectedAsset?.text??''}
+        trashed={trashedAssets.some(a=>a.id===selectedAsset?.id)} onRestore={()=>{if(selectedAsset)void changeAssetTrash(selectedAsset,false);}}
         onDraft={text=>editPanel(p=>({...p,inspectorDrafts:{...p.inspectorDrafts,[draftKey]:text}}))}
         onSave={()=>void saveNodeText()} onRole={(id,role)=>{if(!lock.current)canvas.current?.setEdgeRole(id,role);}} onChat={()=>editPanel(p=>({...p,activeTab:'chat'}))}
         onClose={()=>{if(!lock.current)canvas.current?.clearSelection();}} onFacts={()=>{if(lock.current)return;canvas.current?.clearSelection();editPanel(p=>({...p,activeTab:'config'}));requestAnimationFrame(()=>document.querySelector<HTMLTextAreaElement>('.right-panel textarea')?.focus());}} busy={busy}/>
@@ -357,6 +386,7 @@ export function Workspace() {
       <span role="status">{themeError || (!generation.review&&generation.error) || status}{project && !conflict ? ` · 修订 ${project.revision}` : ''}</span>
       <span>{sync.status || '本地优先 · 自由创作'}</span>
     </footer>
+    {scenariosOpen&&<ScenarioDialog onClose={()=>setScenariosOpen(false)} onChoose={template=>{canvas.current?.addGeneration(scenarioSettings(template));setScenariosOpen(false);setStatus(`已创建${template.name}节点，请连接商品参考并调整要求。`);}}/>}
     {sync.failed && <div className="conflict-banner" role="alert"><strong>画布保存失败或发生修订冲突</strong><span>当前草稿已保留；重新载入会舍弃本画布草稿，另存会保留为新画布。</span>{!sync.conflict&&<Button disabled={busy} onClick={()=>void perform(sync.retry)}>重试画布保存</Button>}<Button disabled={busy} onClick={()=>void perform(sync.reload)}>重新载入画布</Button><Button disabled={busy} onClick={()=>void perform(sync.copy)}>另存画布副本</Button></div>}
     {conflict && <div className="conflict-banner" role="alert">
       <strong>内容已在另一处更新</strong>

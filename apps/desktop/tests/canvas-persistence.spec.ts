@@ -93,7 +93,7 @@ test('C4 conflict keeps draft, blocks close and saves a separate canvas without 
       const c = await b.loadCanvas({ projectId, canvasId });
       return b.saveCanvas({ projectId, document: { ...c.document, viewport: { x: 999, y: 20, zoom: 1 } }, panel: c.panel, expectedRevision: c.document.revision });
     });
-    await page.getByRole('button', { name: '添加 Agent', exact: true }).click();
+    await page.locator('.graph-more summary').click();await page.getByRole('button', { name: '添加 Agent', exact: true }).click();
     await expect(page.getByRole('alert')).toContainText('修订冲突');
     await app.evaluate(() => {
       const original = console.error;

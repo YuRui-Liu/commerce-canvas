@@ -15,14 +15,19 @@ const fields: {key:keyof Photography;label:string;options:string[][]}[]=[
 ];
 export function PhotographyDialog({value,onApply,onClose}:{value:Photography;onApply:(value:Photography)=>void;onClose:()=>void}){
  const [draft,setDraft]=useState(()=>({...value}));const [customFocal,setCustomFocal]=useState(draft.focalLength!==null&&![24,35,50,85,100,135,200].includes(draft.focalLength));
+ const [section,setSection]=useState<'gear'|'composition'|'light'>('gear');
+ const groupKeys={gear:['camera','lens','aperture'],composition:['angle','framing'],light:['lighting','direction','softness','temperature','shadow']};
  return <Dialog title="摄影与灯光" onClose={onClose}><div className="photography-dialog nodrag nowheel nopan" onKeyDown={e=>e.stopPropagation()}>
   <p className="muted">这些参数用于定义生成画面的摄影风格，不代表真实相机或 EXIF 信息。</p>
   <div className="generation-presets">{([['white-product','白底商品'],['lifestyle','生活方式'],['macro','微距细节']] as const).map(([key,name])=><button key={key} onClick={()=>{setDraft({...defaultPhotography(),...photographyPresets[key]});setCustomFocal(false);}}>{name}</button>)}</div>
-  <div className="generation-field-grid">{fields.map(field=><label key={field.key}>{field.label}<select aria-label={field.label} value={String(draft[field.key]??'auto')} onChange={e=>setDraft({...draft,[field.key]:e.target.value})}>{field.options.map(([v,label])=><option key={v} value={v}>{label}</option>)}</select></label>)}
+  <div className="photography-tabs" role="tablist" aria-label="摄影设置分组">{([['gear','◎ 器材'],['composition','▣ 构图'],['light','☼ 灯光']] as const).map(([key,label])=><button key={key} role="tab" aria-selected={section===key} onClick={()=>setSection(key)}>{label}</button>)}</div>
+  <div className="photography-sections">{fields.filter(field=>groupKeys[section].includes(field.key)).map(field=><section className="photography-field" key={field.key} aria-label={field.label}><h3>{field.label}</h3><div className={`photo-choices ${field.key==='camera'||field.key==='lighting'?'visual-choices':''}`}>{field.options.map(([v,label],index)=><button key={v} aria-label={`${field.label} ${label}`} aria-pressed={String(draft[field.key]??'auto')===v} onClick={()=>setDraft({...draft,[field.key]:v})}>{(field.key==='camera'||field.key==='lighting')&&<svg viewBox="0 0 60 40" aria-hidden="true" fill="none"><rect x="17" y="15" width="26" height="18" rx="4" stroke="currentColor"/>{field.key==='camera'?<><circle cx="30" cy="24" r={5+index/2} stroke="currentColor"/><path d="M22 15v-4h13v4" stroke="currentColor"/></>:<><circle cx={15+index*4} cy="7" r="4" fill="currentColor" opacity=".45"/><path d={`M${15+index*4} 11 L22 28 L38 28 Z`} fill="currentColor" opacity=".15"/></>}</svg>}<span>{label}</span></button>)}</div></section>)}
+   {section==='gear'&&<>
    <label>焦距<select aria-label="焦距" value={customFocal?'custom':draft.focalLength??'auto'} onChange={e=>{setCustomFocal(e.target.value==='custom');setDraft({...draft,focalLength:e.target.value==='auto'?null:e.target.value==='custom'?50:Number(e.target.value)});}}><option value="auto">自动</option>{[24,35,50,85,100,135,200].map(v=><option key={v} value={v}>{v} mm</option>)}<option value="custom">自定义 8–300 mm</option></select></label>
    {customFocal&&<label>自定义焦距 mm<input type="number" min={8} max={300} value={draft.focalLength??50} onChange={e=>setDraft({...draft,focalLength:Number(e.target.value)})}/></label>}
+   {draft.camera==='custom'&&<label>相机风格描述<input maxLength={200} value={draft.customCamera??''} onChange={e=>setDraft({...draft,customCamera:e.target.value})}/></label>}
+   </>}
   </div>
-  {draft.camera==='custom'&&<label>相机风格描述<input maxLength={200} value={draft.customCamera??''} onChange={e=>setDraft({...draft,customCamera:e.target.value})}/></label>}
   <div className="dialog-actions"><button className="button" onClick={()=>{setDraft(defaultPhotography());setCustomFocal(false);}}>重置为自动</button><button className="button" onClick={onClose}>取消</button><button className="button primary" disabled={!PhotographySchema.safeParse(draft).success} onClick={()=>onApply(draft)}>应用摄影设置</button></div>
  </div></Dialog>;
 }

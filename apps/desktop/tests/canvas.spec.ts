@@ -10,14 +10,14 @@ test('canvas graph drag history, connections, grouping and viewport survive UI c
     page.setDefaultTimeout(5000);
     const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
     await page.getByRole('button',{name:'创建项目',exact:true}).first().click();await page.getByLabel('项目名称').fill('图交互验证');await page.getByRole('button',{name:'创建',exact:true}).click();
-    await page.getByRole('button',{name:'添加 Agent',exact:true}).click();
+    await page.locator('.graph-more summary').click();await page.getByRole('button',{name:'添加 Agent',exact:true}).click();
     const node=page.locator('.react-flow__node-agent').first();await expect(node).toBeVisible();
     const initial=await node.evaluate(el=>(el as HTMLElement).style.transform);
     const box=await node.boundingBox();await page.mouse.move(box!.x+80,box!.y+20);await page.mouse.down();await page.mouse.move(box!.x+160,box!.y+100,{steps:12});await page.mouse.up();
     await expect.poll(()=>node.evaluate(el=>(el as HTMLElement).style.transform)).not.toBe(initial);
     await page.getByRole('button',{name:'撤销',exact:true}).click();await expect.poll(()=>node.evaluate(el=>(el as HTMLElement).style.transform)).toBe(initial);
     await page.getByRole('button',{name:'重做',exact:true}).click();
-    await page.getByRole('button',{name:'添加 Agent',exact:true}).click();await page.getByRole('button',{name:'自动布局',exact:true}).click();await page.getByRole('button',{name:'适合视图',exact:true}).click();
+    await page.locator('.graph-more summary').click();await page.getByRole('button',{name:'添加 Agent',exact:true}).click();await page.getByRole('button',{name:'自动布局',exact:true}).click();await page.getByRole('button',{name:'适合视图',exact:true}).click();
     await expect(page.locator('.react-flow__node-agent')).toHaveCount(2);
     await page.screenshot({path:'apps/desktop/dist/c2-before-connect.png'});
     const source=page.locator('.react-flow__node-agent').nth(0).locator('.source');const target=page.locator('.react-flow__node-agent').nth(1).locator('[data-handleid="product"]');
@@ -25,7 +25,7 @@ test('canvas graph drag history, connections, grouping and viewport survive UI c
     await page.locator('.react-flow__edge-textbg').click();await expect(page.locator('.react-flow__edge.selected')).toHaveCount(1);
     await page.locator('.react-flow__edge').focus();await page.keyboard.press('Delete');await expect(page.locator('.react-flow__edge')).toHaveCount(0);await expect(page.locator('.react-flow__node-agent')).toHaveCount(2);
     await page.getByRole('button',{name:'撤销',exact:true}).click();await expect(page.locator('.react-flow__edge')).toHaveCount(1);
-    await page.locator('.react-flow__edge-textbg').click();await page.getByRole('button',{name:'删除所选',exact:true}).click();await expect(page.locator('.react-flow__edge')).toHaveCount(0);await expect(page.locator('.react-flow__node-agent')).toHaveCount(2);
+    await page.locator('.react-flow__edge-textbg').click();await page.getByRole('button',{name:'移除节点',exact:true}).click();await expect(page.locator('.react-flow__edge')).toHaveCount(0);await expect(page.locator('.react-flow__node-agent')).toHaveCount(2);
     await page.getByRole('button',{name:'撤销',exact:true}).click();await expect(page.locator('.react-flow__edge')).toHaveCount(1);
     const reverseSource=await page.locator('.react-flow__node-agent').nth(1).locator('.source').boundingBox();const reverseTarget=await page.locator('.react-flow__node-agent').nth(0).locator('[data-handleid="style"]').boundingBox();
     await page.mouse.move(reverseSource!.x+reverseSource!.width/2,reverseSource!.y+reverseSource!.height/2);await page.mouse.down();await page.mouse.move(reverseTarget!.x+reverseTarget!.width/2,reverseTarget!.y+reverseTarget!.height/2,{steps:10});await page.mouse.up();
@@ -69,7 +69,7 @@ test('canvas benchmark 200 nodes 300 edges real Electron drag and layout',async(
   const app=await electron.launch({...(process.env.COMMERCECANVAS_EXECUTABLE?{executablePath:process.env.COMMERCECANVAS_EXECUTABLE,args:[]}:{args:[resolve('apps/desktop/dist/main/index.js')]}),env:{...process.env,COMMERCECANVAS_TEST_USER_DATA:root}});
   try{
     const page=await app.firstWindow();await page.getByRole('button',{name:'创建项目',exact:true}).first().click();await page.getByLabel('项目名称').fill('仅测试性能');await page.getByRole('button',{name:'创建',exact:true}).click();
-    await expect(page.getByRole('button',{name:'添加 Agent',exact:true})).toBeVisible();
+    await page.locator('.graph-more summary').click();await expect(page.getByRole('button',{name:'添加 Agent',exact:true})).toBeVisible();
     await page.evaluate(async()=>{const add=Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='添加 Agent')!;for(let i=0;i<200;i++){add.click();if(i%25===24)await new Promise(requestAnimationFrame);}});
     await expect(page.locator('.graph-status')).toContainText('200 个节点');
     // Test-only fixture injection through the rendered component's public connection callback.

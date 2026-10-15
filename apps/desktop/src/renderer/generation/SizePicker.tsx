@@ -1,0 +1,11 @@
+import {useState} from 'react';
+import type {GenerationSettings} from '../../../../../packages/contracts/src/imageGeneration';
+import {resolveGenerationSettings} from '../../../../../packages/runtime/src/imageGeneration/settings';
+export function SizePicker({value,onApply,onCancel}:{value:GenerationSettings;onApply:(value:GenerationSettings)=>void;onCancel:()=>void}){
+ const [draft,setDraft]=useState(()=>({...value}));const patch=(p:Partial<GenerationSettings>)=>setDraft(previous=>({...previous,...p}));
+ let dimensions='',valid=true;try{const size=resolveGenerationSettings(draft);dimensions=`${size.width} × ${size.height} px`;}catch{valid=false;dimensions='请选择有效尺寸：边长为 16 的倍数，面积 655,360–8,294,400 px，最长边 3840，比例不超过 3:1。';}
+ return <><p className="parameter-section-title">画幅比例</p><div className="ratio-options">{(['1:1','3:4','4:3','2:3','3:2','9:16','16:9'] as const).map(r=>{const [w,h]=r.split(':').map(Number);return <button key={r} aria-label={`画幅 ${r}`} aria-pressed={draft.ratio===r} onClick={()=>patch({ratio:r})}><i style={{width:30*w/Math.max(w,h),height:30*h/Math.max(w,h)}}/><span>{r}</span></button>;})}</div>
+ <p className="parameter-section-title">分辨率 {draft.model==='gpt-image-2'&&<small>· 当前模型支持 1K</small>}</p><div className="choice-options">{(['1K','2K','4K','custom'] as const).map(r=><button key={r} disabled={draft.model==='gpt-image-2'&&r!=='1K'} aria-pressed={draft.resolution===r} onClick={()=>patch({resolution:r,width:r==='custom'?1024:undefined,height:r==='custom'?1024:undefined})}>{r==='custom'?'自定义':r}</button>)}</div>
+ {draft.resolution==='custom'&&<div className="generation-field-grid"><label>宽度 px<input type="number" min={16} max={3840} step={16} value={draft.width??''} onChange={e=>patch({width:Number(e.target.value)>0?Math.floor(Number(e.target.value)):undefined})}/></label><label>高度 px<input type="number" min={16} max={3840} step={16} value={draft.height??''} onChange={e=>patch({height:Number(e.target.value)>0?Math.floor(Number(e.target.value)):undefined})}/></label></div>}
+ <p className="muted" role={valid?undefined:'alert'}>{dimensions}</p><div className="dialog-actions"><button className="button" onClick={onCancel}>取消</button><button className="button primary" disabled={!valid} onClick={()=>onApply(draft)}>应用尺寸</button></div></>;
+}

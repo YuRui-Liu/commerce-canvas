@@ -11,6 +11,20 @@ let directory: string, db: ReturnType<typeof openDatabase>, service: AssetServic
 beforeEach(() => { directory = mkdtempSync(join(tmpdir(), 'cc-assets-')); db = openDatabase(join(directory, 'db')); projectId = new ProjectRepository(db).create('Test').id; service = new AssetService(db, directory); });
 afterEach(async () => { await service?.thumbnails.drain(); db?.close(); rmSync(directory, { recursive: true, force: true }); });
 const image = () => sharp({ create: { width: 80, height: 40, channels: 3, background: 'red' } }).jpeg().withMetadata({ orientation: 6 }).toBuffer();
+it('lists deleted versions separately while preserving referenced content and project isolation', async () => {
+  const first = service.importText({projectId, text:'original'});
+  const second = service.saveTextVersion({projectId, assetId:first.assetId, text:'updated'});
+  service.repository.addReference({projectId,versionId:first.id,ownerId:'saved-canvas',kind:'canvas'});
+  service.trashAsset(projectId,first.assetId);
+  expect(service.repository.list(projectId)).toEqual([]);
+  expect(service.repository.list(projectId,true).map(a=>a.id)).toEqual([first.id,second.id]);
+  expect((await service.read(first.id)).toString()).toBe('original');
+  const other = new ProjectRepository(db).create('Other').id;
+  expect(service.repository.list(other,true)).toEqual([]);
+  service.restoreAsset(projectId,first.assetId);
+  expect(service.repository.list(projectId,true)).toEqual([]);
+  expect(service.repository.list(projectId)).toHaveLength(2);
+});
 it('serves the thumbnail immediately after import without racing background generation',async()=>{
  const version=await service.importImage({projectId,bytes:await image(),fileName:'new.jpg'});
  const thumbnail=await service.read(version.id,'thumbnail',projectId);

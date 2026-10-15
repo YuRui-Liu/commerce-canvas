@@ -18,12 +18,12 @@ test('C3 clipboard text creates a real immutable asset and inspector preserves n
  const versions=await page.evaluate(async()=>{const id=await window.commerceCanvas.getCurrentProject();return window.commerceCanvas.listAssets({projectId:id!});});
  expect(versions.filter(v=>v.kind==='text').map(v=>v.text)).toEqual(expect.arrayContaining(['商品依据：棉','商品依据：纯棉']));
  expect(new Set(versions.map(v=>v.assetId)).size).toBe(1);
- await page.getByLabel('节点文本草稿').fill('未保存草稿');await page.getByRole('button',{name:'添加 Agent',exact:true}).click();await page.getByRole('button',{name:'自动布局',exact:true}).click();await page.getByRole('button',{name:'适合视图',exact:true}).click();
+ await page.getByLabel('节点文本草稿').fill('未保存草稿');await page.locator('.graph-more summary').click();await page.getByRole('button',{name:'添加 Agent',exact:true}).click();await page.getByRole('button',{name:'自动布局',exact:true}).click();await page.getByRole('button',{name:'适合视图',exact:true}).click();
  await page.locator('.react-flow__node-agent header').click();await page.locator('.react-flow__node-text header').click();await expect(page.getByLabel('节点文本草稿')).toHaveValue('未保存草稿');
  await page.getByLabel('节点文本草稿').evaluate(el=>{const data=new DataTransfer();data.setData('text/plain','只编辑');el.dispatchEvent(new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true}));});
  await expect(page.locator('.react-flow__node-text')).toHaveCount(1);
  await page.getByLabel('节点文本草稿').focus();await page.keyboard.press('Delete');await expect(page.locator('.react-flow__node-text')).toHaveCount(1);
- await page.getByRole('button',{name:'添加 Agent',exact:true}).click();await page.getByRole('button',{name:'添加 Agent',exact:true}).click();await page.getByRole('button',{name:'自动布局',exact:true}).click();await page.getByRole('button',{name:'适合视图',exact:true}).click();
+ await page.locator('.graph-more summary').click();await page.getByRole('button',{name:'添加 Agent',exact:true}).click();await page.getByRole('button',{name:'添加 Agent',exact:true}).click();await page.getByRole('button',{name:'自动布局',exact:true}).click();await page.getByRole('button',{name:'适合视图',exact:true}).click();
  const source=page.locator('.react-flow__node-text .source');
  await source.click();await page.locator('.react-flow__node-agent').nth(0).locator('[data-handleid="facts"]').click();
  await source.click();await page.locator('.react-flow__node-agent').nth(1).locator('[data-handleid="instruction"]').click();
@@ -63,7 +63,10 @@ test('C3 dropped files preserve partial successes at transformed coordinates and
  const portrait=Array.from(await sharp({create:{width:600,height:1200,channels:4,background:'#64947d'}}).png().toBuffer());
  await page.locator('.react-flow__controls-zoomin').click();await page.locator('.react-flow__controls-zoomin').click();
  const surface=await page.locator('.react-flow').boundingBox();await page.mouse.move(surface!.x+150,surface!.y+150);await page.mouse.down({button:'middle'});await page.mouse.move(surface!.x+200,surface!.y+180,{steps:8});await page.mouse.up({button:'middle'});
- const point={x:surface!.x+100,y:surface!.y+150};
+ await page.locator('.react-flow__viewport').evaluate(async el=>{let previous='',stable=0;for(let i=0;i<90;i++){await new Promise(requestAnimationFrame);const current=getComputedStyle(el).transform;stable=current===previous?stable+1:0;if(stable>=4)return;previous=current;}throw Error('Viewport did not settle');});
+ // DragEvent client coordinates are integer CSS pixels; avoid implicit truncation
+ // of the toolbar's fractional layout origin when computing the independent inverse.
+ const point={x:Math.round(surface!.x+100),y:Math.round(surface!.y+150)};
  const expected=await page.locator('.react-flow__viewport').evaluate((el,p)=>{const m=new DOMMatrix(getComputedStyle(el).transform);const bounds=el.closest('.react-flow')!.getBoundingClientRect();return {x:(p.x-bounds.x-m.e)/m.a,y:(p.y-bounds.y-m.f)/m.d};},point);
  await page.locator('.graph-workspace').evaluate((el,{png,point})=>{const dt=new DataTransfer();dt.items.add(new File([new Uint8Array([1,2,3])],'broken.png',{type:'image/png'}));dt.items.add(new File([new Uint8Array(png)],'fixture-wide.png',{type:'image/png'}));el.dispatchEvent(new DragEvent('drop',{clientX:point.x,clientY:point.y,dataTransfer:dt,bubbles:true,cancelable:true}));},{png,point});
  await expect(page.locator('.react-flow__node-asset')).toHaveCount(1);await expect(page.getByLabel('逐文件导入结果')).toContainText('broken.png：失败');await expect(page.getByLabel('逐文件导入结果')).toContainText('fixture-wide.png：成功');

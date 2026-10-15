@@ -69,7 +69,7 @@ export class RuntimeService {
       case 'updateProject': { const p = internalSchemas.updateProject.parse(payload); return this.projects.updateProduct(p.projectId, p.expectedRevision, p.update); }
       case 'renameProject': { const p = internalSchemas.renameProject.parse(payload); return this.projects.rename(p.projectId, p.expectedRevision, p.name); }
       case 'deleteProject': { const p = internalSchemas.deleteProject.parse(payload); this.projects.delete(p.projectId, p.expectedRevision); return null; }
-      case 'listAssets': return this.assets.repository.list(internalSchemas.listAssets.parse(payload).projectId);
+      case 'listAssets': {const p=internalSchemas.listAssets.parse(payload);return this.assets.repository.list(p.projectId,p.trashed);}
       case 'saveText': return this.assets.importText(internalSchemas.saveText.parse(payload));
       case 'saveTextVersion': return this.assets.saveTextVersion(internalSchemas.saveTextVersion.parse(payload));
       case 'importImages': return this.assets.importImages(internalSchemas.importImages.parse(payload));

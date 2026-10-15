@@ -9,7 +9,7 @@ async function launchCanvas(name:string){
   const page=await app.firstWindow();
   await page.getByRole('button',{name:'创建项目',exact:true}).first().click();
   await page.getByLabel('项目名称').fill(name);await page.getByRole('button',{name:'创建',exact:true}).click();
-  await expect(page.getByRole('button',{name:'添加 Agent',exact:true})).toBeVisible();
+  await page.locator('.graph-more summary').click();await expect(page.getByRole('button',{name:'添加 Agent',exact:true})).toBeVisible();
   return {app,page,root};
 }
 
@@ -35,6 +35,7 @@ test('canvas batch commands serialize, lock edits, and cancel unfinished work on
     const other=await page.evaluate(()=>window.commerceCanvas.getCurrentProject());
     await page.getByLabel('商品项目',{exact:true}).selectOption(original!);
     await expect(page.getByLabel('商品项目', {exact:true}).locator('option:checked')).toHaveText('批次原项目');
+    await page.locator('.graph-more summary').click();
     await page.getByRole('button',{name:'添加 Agent',exact:true}).click();
     await page.evaluate(async()=>{
       const asset=await window.commerceCanvas.saveText({projectId:(await window.commerceCanvas.getCurrentProject())!,text:'真实测试素材'});

@@ -39,9 +39,9 @@ export class AssetRepository {
     this.get(versionId);
     return JSON.parse(String(this.db.prepare('SELECT orientation FROM asset_versions WHERE id = ?').get(versionId)!.orientation));
   }
-  list(projectId: string): AssetVersion[] {
+  list(projectId: string, trashed = false): AssetVersion[] {
     this.requireProject(projectId);
-    return this.db.prepare('SELECT v.metadata FROM asset_versions v JOIN assets a ON a.id = v.asset_id WHERE v.project_id = ? AND a.trashed_at IS NULL ORDER BY v.rowid').all(projectId).map(row => AssetVersionSchema.parse(JSON.parse(String(row.metadata))));
+    return this.db.prepare('SELECT v.metadata FROM asset_versions v JOIN assets a ON a.id = v.asset_id WHERE v.project_id = ? AND (a.trashed_at IS NOT NULL) = ? ORDER BY v.rowid').all(projectId,Number(trashed)).map(row => AssetVersionSchema.parse(JSON.parse(String(row.metadata))));
   }
   addReference(input: { projectId: string; versionId: string; ownerId: string; kind: 'canvas' | 'run'; active?: boolean }) {
     const version = this.get(input.versionId, input.projectId);

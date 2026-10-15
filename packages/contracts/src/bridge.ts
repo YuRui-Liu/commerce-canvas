@@ -38,7 +38,7 @@ export const requestSchemas = {
   importImageBytes: z.object({ projectId: IdSchema, bytes: z.instanceof(Uint8Array).refine(b => b.byteLength > 0 && b.byteLength <= 50 * 1024 * 1024), name: NameSchema }).strict(),
   saveText: z.object({ projectId: IdSchema, text: z.string().max(1_000_000) }).strict(),
   saveTextVersion: z.object({ projectId: IdSchema, assetId: IdSchema, text: z.string().max(1_000_000) }).strict(),
-  listAssets: project,
+  listAssets: project.extend({trashed:z.boolean().optional()}).strict(),
   trashAsset: z.object({ projectId: IdSchema, assetId: IdSchema }).strict(),
   restoreAsset: z.object({ projectId: IdSchema, assetId: IdSchema }).strict(),
   getCurrentProject: empty, setCurrentProject: z.object({ projectId: IdSchema.nullable() }).strict(),
